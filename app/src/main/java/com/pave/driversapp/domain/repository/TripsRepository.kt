@@ -29,30 +29,44 @@ class TripsRepositoryImpl(
     
     override suspend fun createTrip(trip: Trip): Result<String> {
         return try {
+            // Validate trip data
+            if (trip.orderId.isBlank() || trip.driverId.isBlank() || trip.orgId.isBlank()) {
+                return Result.failure(IllegalArgumentException("Invalid trip data: missing required fields"))
+            }
+            
             val tripDoc = tripsCollection.document()
             val tripWithId = trip.copy(tripId = tripDoc.id)
             
             tripDoc.set(tripWithId)
                 .await()
             
+            android.util.Log.d("TripsRepository", "✅ Trip created successfully: ${tripDoc.id}")
             Result.success(tripDoc.id)
         } catch (e: Exception) {
+            android.util.Log.e("TripsRepository", "❌ Error creating trip: ${e.message}")
             Result.failure(e)
         }
     }
     
     override suspend fun getActiveTrip(driverId: String): Trip? {
         return try {
-            tripsCollection
+            if (driverId.isBlank()) {
+                android.util.Log.w("TripsRepository", "⚠️ Empty driverId provided")
+                return null
+            }
+            
+            val snapshot = tripsCollection
                 .whereEqualTo("driverId", driverId)
                 .whereEqualTo("active", true)
                 .limit(1)
                 .get()
                 .await()
-                .documents
-                .firstOrNull()
-                ?.toObject(Trip::class.java)
+            
+            val trip = snapshot.documents.firstOrNull()?.toObject(Trip::class.java)
+            android.util.Log.d("TripsRepository", "📋 Active trip query result: ${if (trip != null) "Found" else "Not found"}")
+            trip
         } catch (e: Exception) {
+            android.util.Log.e("TripsRepository", "❌ Error getting active trip: ${e.message}")
             null
         }
     }

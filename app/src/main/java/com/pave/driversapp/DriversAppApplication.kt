@@ -13,6 +13,7 @@ import com.pave.driversapp.data.local.SecurePreferences
 import com.pave.driversapp.data.repository.AuthRepositoryImpl
 import com.pave.driversapp.data.repository.DepotRepositoryImpl
 import com.pave.driversapp.domain.repository.TripsRepositoryImpl
+import com.pave.driversapp.domain.repository.MembershipRepositoryImpl
 import com.pave.driversapp.data.remote.FirebaseAuthDataSource
 import com.pave.driversapp.data.remote.FirestoreDataSource
 import com.google.firebase.auth.FirebaseAuth
@@ -25,15 +26,32 @@ class DriversAppApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         
-        // Set up crash handling for Compose hover events
+        // Set up comprehensive crash handling
+        val originalHandler = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, exception ->
-            if (exception.message?.contains("ACTION_HOVER_EXIT") == true) {
-                Log.w("ComposeCrashHandler", "Caught ACTION_HOVER_EXIT crash, ignoring: ${exception.message}")
-                // Don't crash the app for this known Compose issue
-                return@setDefaultUncaughtExceptionHandler
+            try {
+                // Handle known Compose issues
+                if (exception.message?.contains("ACTION_HOVER_EXIT") == true) {
+                    Log.w("ComposeCrashHandler", "Caught ACTION_HOVER_EXIT crash, ignoring: ${exception.message}")
+                    return@setDefaultUncaughtExceptionHandler
+                }
+                
+                // Handle other known issues
+                if (exception.message?.contains("SurfaceView") == true) {
+                    Log.w("ComposeCrashHandler", "Caught SurfaceView crash, ignoring: ${exception.message}")
+                    return@setDefaultUncaughtExceptionHandler
+                }
+                
+                // Log all crashes for debugging
+                Log.e("CrashHandler", "Uncaught exception in thread ${thread.name}", exception)
+                
+                // Let other crashes be handled normally by the original handler
+                originalHandler?.uncaughtException(thread, exception)
+            } catch (e: Exception) {
+                Log.e("CrashHandler", "Error in crash handler", e)
+                // Fallback to original handler
+                originalHandler?.uncaughtException(thread, exception)
             }
-            // Let other crashes be handled normally
-            Thread.getDefaultUncaughtExceptionHandler()?.uncaughtException(thread, exception)
         }
     }
     
@@ -58,4 +76,5 @@ class DriversAppApplication : Application() {
     
     val depotRepository by lazy { DepotRepositoryImpl(firebaseFirestore, this) }
     val tripsRepository by lazy { TripsRepositoryImpl(firebaseFirestore, this) }
+    val membershipRepository by lazy { MembershipRepositoryImpl(firebaseFirestore) }
 }

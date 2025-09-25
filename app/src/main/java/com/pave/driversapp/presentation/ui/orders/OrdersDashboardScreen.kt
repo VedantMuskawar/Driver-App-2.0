@@ -23,6 +23,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.pave.driversapp.domain.model.Order
 import com.pave.driversapp.domain.model.ScheduledOrder
 import com.pave.driversapp.domain.repository.OrdersRepositoryImpl
+import com.pave.driversapp.domain.repository.MembershipRepositoryImpl
+import com.google.firebase.firestore.FirebaseFirestore
 import com.pave.driversapp.presentation.viewmodel.OrdersViewModel
 import com.pave.driversapp.presentation.ui.components.ScheduledOrderCard
 
@@ -37,12 +39,15 @@ fun OrdersDashboardScreen(
     onScheduledOrderClick: (ScheduledOrder) -> Unit = {}
 ) {
     val ordersRepository = remember { OrdersRepositoryImpl() }
-    val ordersViewModel: OrdersViewModel = viewModel { OrdersViewModel(ordersRepository) }
+    val membershipRepository = remember { MembershipRepositoryImpl(FirebaseFirestore.getInstance()) }
+    val ordersViewModel: OrdersViewModel = viewModel { 
+        OrdersViewModel(ordersRepository, membershipRepository) 
+    }
     val uiState by ordersViewModel.uiState.collectAsStateWithLifecycle()
     
     // Initialize the view model
     LaunchedEffect(orgId, userRole) {
-        ordersViewModel.initialize(orgId, userRole)
+        ordersViewModel.initialize(orgId, "current_user_id") // TODO: Get actual user ID
     }
     
     // Tab state for switching between orders and scheduled orders

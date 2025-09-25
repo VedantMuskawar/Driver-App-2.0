@@ -5,7 +5,10 @@ import androidx.lifecycle.viewModelScope
 import com.pave.driversapp.domain.model.Order
 import com.pave.driversapp.domain.model.ScheduledOrder
 import com.pave.driversapp.domain.model.OrdersUiState
+import com.pave.driversapp.domain.model.UserRole
 import com.pave.driversapp.domain.repository.OrdersRepository
+import com.pave.driversapp.domain.repository.MembershipRepository
+import com.pave.driversapp.util.MembershipTestData
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -14,29 +17,53 @@ import java.text.SimpleDateFormat
 import java.util.*
 
 class OrdersViewModel(
-    private val ordersRepository: OrdersRepository
+    private val ordersRepository: OrdersRepository,
+    private val membershipRepository: MembershipRepository
 ) : ViewModel() {
     
     private val _uiState = MutableStateFlow(OrdersUiState())
     val uiState: StateFlow<OrdersUiState> = _uiState.asStateFlow()
     
     private var currentOrgId: String = ""
-    private var currentUserRole: Int = 0
+    private var currentUserId: String = ""
+    private var currentUserRole: UserRole? = null
+    private var driverVehicleId: String? = null
     
-    fun initialize(orgId: String, userRole: Int) {
-        android.util.Log.d("OrdersViewModel", "🚀 initialize() called with orgId: $orgId, userRole: $userRole")
+    fun initialize(orgId: String, userId: String) {
+        android.util.Log.d("OrdersViewModel", "🚀 initialize() called with orgId: $orgId, userId: $userId")
         currentOrgId = orgId
-        currentUserRole = userRole
+        currentUserId = userId
         
-        // Set initial date to today
-        val today = getCurrentDateString()
-        android.util.Log.d("OrdersViewModel", "📅 Setting initial date to: $today")
-        _uiState.value = _uiState.value.copy(selectedDate = today)
-        
-        android.util.Log.d("OrdersViewModel", "📋 Calling loadOrders($today)")
-        loadOrders(today)
-        android.util.Log.d("OrdersViewModel", "🚗 Calling loadAvailableVehicles()")
-        loadAvailableVehicles()
+        viewModelScope.launch {
+            try {
+                // Check if membership data exists, create if not
+                val membershipExists = MembershipTestData.checkMembershipData(userId, orgId)
+                if (!membershipExists) {
+                    android.util.Log.d("OrdersViewModel", "🔧 Creating sample membership data for testing...")
+                    MembershipTestData.createSampleMembershipData()
+                }
+                
+                // Get user role and permissions
+                currentUserRole = membershipRepository.getUserRole(userId, orgId)
+                driverVehicleId = membershipRepository.getDriverVehicleId(userId, orgId)
+                
+                android.util.Log.d("OrdersViewModel", "👤 User role: ${currentUserRole?.displayName}")
+                android.util.Log.d("OrdersViewModel", "🚗 Driver vehicle ID: $driverVehicleId")
+                
+                // Set initial date to today
+                val today = getCurrentDateString()
+                android.util.Log.d("OrdersViewModel", "📅 Setting initial date to: $today")
+                _uiState.value = _uiState.value.copy(selectedDate = today)
+                
+                android.util.Log.d("OrdersViewModel", "📋 Calling loadOrders($today)")
+                loadOrders(today)
+                android.util.Log.d("OrdersViewModel", "🚗 Calling loadAvailableVehicles()")
+                loadAvailableVehicles()
+            } catch (e: Exception) {
+                android.util.Log.e("OrdersViewModel", "❌ Error initializing: ${e.message}")
+                _uiState.value = _uiState.value.copy(errorMessage = "Failed to initialize: ${e.message}")
+            }
+        }
     }
     
     fun selectDate(date: String) {
@@ -60,7 +87,13 @@ class OrdersViewModel(
             
             try {
                 android.util.Log.d("OrdersViewModel", "📡 Starting to collect orders from repository...")
-                ordersRepository.getOrders(currentOrgId, date, vehicleNumber).collect { orders ->
+                ordersRepository.getOrders(
+                    orgId = currentOrgId,
+                    date = date,
+                    vehicleNumber = vehicleNumber,
+                    userRole = currentUserRole,
+                    driverVehicleId = driverVehicleId
+                ).collect { orders ->
                     android.util.Log.d("OrdersViewModel", "📊 Received ${orders.size} orders from repository")
                     orders.forEachIndexed { index, order ->
                         android.util.Log.d("OrdersViewModel", "   Order $index: ${order.orderId} - ${order.clientName} - ${order.address}")
@@ -157,22 +190,22 @@ class OrdersViewModel(
     // Role-based access control
     fun isDateAccessible(date: String): Boolean {
         return when (currentUserRole) {
-            0 -> true // Admin can access any date
-            1, 2 -> { // Manager and Driver can only access today and tomorrow
+            UserRole.ADMIN -> true // Admin can access any date
+            UserRole.MANAGER, UserRole.DRIVER -> { // Manager and Driver can only access today and tomorrow
                 val today = getCurrentDateString()
                 val tomorrow = getTomorrowDateString()
                 date == today || date == tomorrow
             }
-            else -> false
+            null -> false
         }
     }
     
     fun canUseVehicleFilter(): Boolean {
-        return currentUserRole == 0 || currentUserRole == 1
+        return currentUserRole == UserRole.ADMIN || currentUserRole == UserRole.MANAGER
     }
     
     fun canUseCalendar(): Boolean {
-        return currentUserRole == 0
+        return currentUserRole == UserRole.ADMIN
     }
     
     fun getAccessibleDates(): List<String> {
@@ -180,7 +213,7 @@ class OrdersViewModel(
         val tomorrow = getTomorrowDateString()
         
         return when (currentUserRole) {
-            0 -> {
+            UserRole.ADMIN -> {
                 // Admin can see 4 previous days + today + tomorrow
                 val dates = mutableListOf<String>()
                 val calendar = Calendar.getInstance()
@@ -199,8 +232,8 @@ class OrdersViewModel(
                 
                 dates
             }
-            1, 2 -> listOf(today, tomorrow)
-            else -> emptyList()
+            UserRole.MANAGER, UserRole.DRIVER -> listOf(today, tomorrow)
+            null -> emptyList()
         }
     }
     

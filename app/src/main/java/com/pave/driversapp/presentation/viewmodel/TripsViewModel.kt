@@ -14,6 +14,7 @@ import com.pave.driversapp.domain.repository.TripsRepository
 import com.pave.driversapp.domain.repository.DepotRepository
 import com.pave.driversapp.domain.util.LocationUtils
 import com.pave.driversapp.util.LocationManager
+import com.pave.driversapp.util.ValidationUtils
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import android.location.Location
@@ -84,18 +85,24 @@ class TripsViewModel(
                     }
                 }
                 
-                // Check depot location
+                // Check depot location safely
                 val depotResult = depotRepository.getDepot(orgId)
                 val depotSettings = depotResult.getOrNull()
-                val isInsideDepot = if (depotSettings != null && _uiState.value.currentLocation != null) {
-                    LocationUtils.isInsideDepot(
-                        com.pave.driversapp.domain.model.DepotLocation(
-                            _uiState.value.currentLocation!!.latitude,
-                            _uiState.value.currentLocation!!.longitude
-                        ),
-                        depotSettings.depotLocation,
-                        depotSettings.radius
-                    )
+                val currentLocation = _uiState.value.currentLocation
+                val isInsideDepot = if (depotSettings != null && currentLocation != null) {
+                    try {
+                        LocationUtils.isInsideDepot(
+                            com.pave.driversapp.domain.model.DepotLocation(
+                                currentLocation.latitude,
+                                currentLocation.longitude
+                            ),
+                            depotSettings.depotLocation,
+                            depotSettings.radius
+                        )
+                    } catch (e: Exception) {
+                        android.util.Log.e("TripsViewModel", "❌ Error checking depot location: ${e.message}")
+                        false
+                    }
                 } else false
                 
                 _uiState.value = _uiState.value.copy(
@@ -124,9 +131,21 @@ class TripsViewModel(
     }
     
     fun dispatchTrip(initialMeterReading: Int) {
-        val order = _uiState.value.order ?: return
-        val driverId = "current_driver_id" // Get from auth state
+        val order = _uiState.value.order ?: run {
+            android.util.Log.e("TripsViewModel", "❌ Cannot dispatch trip: No order found")
+            _uiState.value = _uiState.value.copy(error = "No order found")
+            return
+        }
+        
+        val driverId = "current_driver_id" // TODO: Get from auth state
         val orgId = order.orgId
+        
+        // Validate meter reading using ValidationUtils
+        if (!ValidationUtils.validateMeterReading(initialMeterReading)) {
+            android.util.Log.e("TripsViewModel", "❌ Invalid meter reading: $initialMeterReading")
+            _uiState.value = _uiState.value.copy(error = "Invalid meter reading")
+            return
+        }
         
         android.util.Log.d("TripsViewModel", "🚀 DISPATCH TRIP STARTED")
         android.util.Log.d("TripsViewModel", "📋 Order: ${order.orderId} - ${order.clientName}")
@@ -208,7 +227,18 @@ class TripsViewModel(
     }
     
     fun markDelivered(imageUri: String) {
-        val trip = _uiState.value.currentTrip ?: return
+        val trip = _uiState.value.currentTrip ?: run {
+            android.util.Log.e("TripsViewModel", "❌ Cannot mark delivered: No active trip")
+            _uiState.value = _uiState.value.copy(error = "No active trip found")
+            return
+        }
+        
+        // Validate image URI using ValidationUtils
+        if (!ValidationUtils.isValidImageUri(imageUri)) {
+            android.util.Log.e("TripsViewModel", "❌ Invalid image URI")
+            _uiState.value = _uiState.value.copy(error = "Invalid image URI")
+            return
+        }
         
         viewModelScope.launch {
             try {
@@ -257,7 +287,19 @@ class TripsViewModel(
     }
     
     fun returnTrip(finalMeterReading: Int) {
-        val trip = _uiState.value.currentTrip ?: return
+        val trip = _uiState.value.currentTrip ?: run {
+            android.util.Log.e("TripsViewModel", "❌ Cannot return trip: No active trip")
+            _uiState.value = _uiState.value.copy(error = "No active trip found")
+            return
+        }
+        
+        // Validate meter reading using ValidationUtils
+        val currentTrip = _uiState.value.currentTrip
+        if (!ValidationUtils.validateMeterReading(finalMeterReading, currentTrip?.initialMeterReading)) {
+            android.util.Log.e("TripsViewModel", "❌ Invalid final meter reading: $finalMeterReading")
+            _uiState.value = _uiState.value.copy(error = "Invalid meter reading")
+            return
+        }
         
         viewModelScope.launch {
             try {
@@ -296,7 +338,18 @@ class TripsViewModel(
     }
     
     fun cancelTrip(cancelledBy: String) {
-        val trip = _uiState.value.currentTrip ?: return
+        val trip = _uiState.value.currentTrip ?: run {
+            android.util.Log.e("TripsViewModel", "❌ Cannot cancel trip: No active trip")
+            _uiState.value = _uiState.value.copy(error = "No active trip found")
+            return
+        }
+        
+        // Validate cancelledBy parameter using ValidationUtils
+        if (!ValidationUtils.isNotBlank(cancelledBy, "Cancellation reason")) {
+            android.util.Log.e("TripsViewModel", "❌ Invalid cancelledBy parameter")
+            _uiState.value = _uiState.value.copy(error = "Invalid cancellation reason")
+            return
+        }
         
         viewModelScope.launch {
             try {

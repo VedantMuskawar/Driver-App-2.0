@@ -7,17 +7,17 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.tasks.await
 
 interface OrdersRepository {
-    suspend fun getOrders(orgId: String, date: String, vehicleNumber: String? = null): Flow<List<Order>>
-    suspend fun getScheduledOrders(orgId: String, date: String, vehicleNumber: String? = null): Flow<List<ScheduledOrder>>
-    suspend fun getAvailableVehicles(orgId: String, date: String): List<String>
+    suspend fun getOrders(orgId: String, date: String, vehicleNumber: String? = null, userRole: com.pave.driversapp.domain.model.UserRole? = null, driverVehicleId: String? = null): Flow<List<Order>>
+    suspend fun getScheduledOrders(orgId: String, date: String, vehicleNumber: String? = null, userRole: com.pave.driversapp.domain.model.UserRole? = null, driverVehicleId: String? = null): Flow<List<ScheduledOrder>>
+    suspend fun getAvailableVehicles(orgId: String, date: String, userRole: com.pave.driversapp.domain.model.UserRole? = null, driverVehicleId: String? = null): List<String>
     suspend fun getOrderById(orderId: String): Order?
     suspend fun getScheduledOrderById(orderId: String): ScheduledOrder?
 }
 
 class OrdersRepositoryImpl : OrdersRepository {
     
-    override suspend fun getOrders(orgId: String, date: String, vehicleNumber: String?): Flow<List<Order>> = flow {
-        android.util.Log.d("OrdersRepository", "🔄 Starting ORDERS fetch for orgId: $orgId, date: $date, vehicle: $vehicleNumber")
+    override suspend fun getOrders(orgId: String, date: String, vehicleNumber: String?, userRole: com.pave.driversapp.domain.model.UserRole?, driverVehicleId: String?): Flow<List<Order>> = flow {
+        android.util.Log.d("OrdersRepository", "🔄 Starting ORDERS fetch for orgId: $orgId, date: $date, vehicle: $vehicleNumber, role: ${userRole?.displayName}")
         emit(emptyList()) // Show loading
         
         try {
@@ -56,10 +56,30 @@ class OrdersRepositoryImpl : OrdersRepository {
                     android.util.Log.d("OrdersRepository", "📄 Processing document: ${document.id}")
                     val scheduledOrder = document.toObject(ScheduledOrder::class.java)
                     if (scheduledOrder != null) {
-                        // Apply vehicle filter in memory if specified
-                        if (vehicleNumber != null && scheduledOrder.vehicleNumber != vehicleNumber) {
-                            android.util.Log.d("OrdersRepository", "🚗 Filtering out vehicle: ${scheduledOrder.vehicleNumber} (not matching $vehicleNumber)")
-                            return@mapNotNull null
+                        // Role-based filtering
+                        when (userRole) {
+                            com.pave.driversapp.domain.model.UserRole.DRIVER -> {
+                                // Drivers can only see orders for their assigned vehicle
+                                if (driverVehicleId != null && scheduledOrder.vehicleID != driverVehicleId) {
+                                    android.util.Log.d("OrdersRepository", "🚗 Driver filtering: ${scheduledOrder.vehicleNumber} (not driver's vehicle)")
+                                    return@mapNotNull null
+                                }
+                            }
+                            com.pave.driversapp.domain.model.UserRole.MANAGER, 
+                            com.pave.driversapp.domain.model.UserRole.ADMIN -> {
+                                // Managers and Admins can see all orders, but apply vehicle filter if specified
+                                if (vehicleNumber != null && scheduledOrder.vehicleNumber != vehicleNumber) {
+                                    android.util.Log.d("OrdersRepository", "🚗 Filtering out vehicle: ${scheduledOrder.vehicleNumber} (not matching $vehicleNumber)")
+                                    return@mapNotNull null
+                                }
+                            }
+                            null -> {
+                                // No role specified, apply vehicle filter if provided
+                                if (vehicleNumber != null && scheduledOrder.vehicleNumber != vehicleNumber) {
+                                    android.util.Log.d("OrdersRepository", "🚗 Filtering out vehicle: ${scheduledOrder.vehicleNumber} (not matching $vehicleNumber)")
+                                    return@mapNotNull null
+                                }
+                            }
                         }
                         
                         // Convert ScheduledOrder to Order format
@@ -112,7 +132,7 @@ class OrdersRepositoryImpl : OrdersRepository {
         }
     }
     
-    override suspend fun getScheduledOrders(orgId: String, date: String, vehicleNumber: String?): Flow<List<ScheduledOrder>> = flow {
+    override suspend fun getScheduledOrders(orgId: String, date: String, vehicleNumber: String?, userRole: com.pave.driversapp.domain.model.UserRole?, driverVehicleId: String?): Flow<List<ScheduledOrder>> = flow {
         android.util.Log.d("OrdersRepository", "🔄 Starting SCH_ORDERS fetch for orgId: $orgId, date: $date, vehicle: $vehicleNumber")
         emit(emptyList()) // Show loading
         
@@ -185,8 +205,8 @@ class OrdersRepositoryImpl : OrdersRepository {
         }
     }
     
-    override suspend fun getAvailableVehicles(orgId: String, date: String): List<String> {
-        android.util.Log.d("OrdersRepository", "🔄 Fetching available vehicles for orgId: $orgId, date: $date")
+    override suspend fun getAvailableVehicles(orgId: String, date: String, userRole: com.pave.driversapp.domain.model.UserRole?, driverVehicleId: String?): List<String> {
+        android.util.Log.d("OrdersRepository", "🔄 Fetching available vehicles for orgId: $orgId, date: $date, role: ${userRole?.displayName}")
         
         return try {
             val firestore = com.google.firebase.firestore.FirebaseFirestore.getInstance()
@@ -218,18 +238,41 @@ class OrdersRepositoryImpl : OrdersRepository {
             
             android.util.Log.d("OrdersRepository", "📊 Query completed. Found ${snapshot.documents.size} documents")
             
-            // Extract unique vehicle numbers from the filtered results
+            // Extract unique vehicle numbers from the filtered results with role-based filtering
             val vehiclesForDate = snapshot.documents.mapNotNull { document ->
                 try {
                     val scheduledOrder = document.toObject(ScheduledOrder::class.java)
-                    scheduledOrder?.vehicleNumber
+                    if (scheduledOrder != null) {
+                        // Role-based filtering for vehicles
+                        when (userRole) {
+                            com.pave.driversapp.domain.model.UserRole.DRIVER -> {
+                                // Drivers only see their assigned vehicle
+                                if (driverVehicleId != null && scheduledOrder.vehicleID == driverVehicleId) {
+                                    scheduledOrder.vehicleNumber
+                                } else {
+                                    null
+                                }
+                            }
+                            com.pave.driversapp.domain.model.UserRole.MANAGER,
+                            com.pave.driversapp.domain.model.UserRole.ADMIN -> {
+                                // Managers and Admins see all vehicles
+                                scheduledOrder.vehicleNumber
+                            }
+                            null -> {
+                                // No role specified, show all vehicles
+                                scheduledOrder.vehicleNumber
+                            }
+                        }
+                    } else {
+                        null
+                    }
                 } catch (e: Exception) {
                     android.util.Log.e("OrdersRepository", "❌ Error processing vehicle document ${document.id}: ${e.message}")
                     null
                 }
             }.distinct().sorted()
             
-            android.util.Log.d("OrdersRepository", "🚗 Found ${vehiclesForDate.size} vehicles for date $date: $vehiclesForDate")
+            android.util.Log.d("OrdersRepository", "🚗 Found ${vehiclesForDate.size} vehicles for role ${userRole?.displayName}: $vehiclesForDate")
             vehiclesForDate
             
         } catch (e: Exception) {

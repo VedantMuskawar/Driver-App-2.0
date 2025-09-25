@@ -108,8 +108,24 @@ class LocationTrackingService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         android.util.Log.d("LocationService", "🛑 LocationTrackingService destroyed")
-        stopLocationUpdates()
-        serviceScope.cancel()
+        
+        // Clean up resources safely
+        try {
+            stopLocationUpdates()
+            stopTracking()
+            serviceScope.cancel()
+            
+            // Clear references to prevent memory leaks
+            fusedLocationClient = null
+            locationCallback = null
+            tripsRepository = null
+            currentTripId = null
+            debugLogger = null
+            
+            android.util.Log.d("LocationService", "✅ Service cleanup completed")
+        } catch (e: Exception) {
+            android.util.Log.e("LocationService", "❌ Error during service cleanup: ${e.message}")
+        }
     }
     
     fun startTracking(tripId: String, tripsRepository: TripsRepository) {
@@ -171,8 +187,14 @@ class LocationTrackingService : Service() {
         android.util.Log.d("LocationService", "⏰ Time: ${location.time}")
         android.util.Log.d("LocationService", "🎯 Accuracy: ${location.accuracy}m")
         
-        if (!isTracking || currentTripId == null) {
-            android.util.Log.w("LocationService", "⚠️ Not tracking or no trip ID - ignoring location")
+        if (!isTracking || currentTripId == null || tripsRepository == null) {
+            android.util.Log.w("LocationService", "⚠️ Not tracking or missing required data - ignoring location")
+            return
+        }
+        
+        // Validate location data
+        if (!location.hasAccuracy() || location.accuracy > 100) {
+            android.util.Log.w("LocationService", "⚠️ Location accuracy too low (${location.accuracy}m) - ignoring")
             return
         }
         
@@ -189,13 +211,13 @@ class LocationTrackingService : Service() {
                 tripsRepository?.addLocationPoint(currentTripId!!, locationPoint)
                 android.util.Log.d("LocationService", "✅ Location point saved successfully")
                 
-                // Log to debug file
+                // Log to debug file safely
                 debugLogger?.logLocationUpdate(locationPoint, currentTripId!!)
             } catch (e: Exception) {
                 android.util.Log.e("LocationService", "❌ Error saving location point: ${e.message}")
                 android.util.Log.e("LocationService", "❌ Exception type: ${e.javaClass.simpleName}")
                 
-                // Log error to debug file
+                // Log error to debug file safely
                 debugLogger?.logServiceEvent("LOCATION_SAVE_ERROR", mapOf(
                     "error" to (e.message ?: "Unknown error"),
                     "exceptionType" to e.javaClass.simpleName,

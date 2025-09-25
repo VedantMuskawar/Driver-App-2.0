@@ -25,6 +25,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.pave.driversapp.domain.model.Order
 import com.pave.driversapp.domain.repository.OrdersRepositoryImpl
+import com.pave.driversapp.domain.repository.MembershipRepositoryImpl
+import com.google.firebase.firestore.FirebaseFirestore
 import com.pave.driversapp.presentation.viewmodel.OrdersViewModel
 import com.pave.driversapp.presentation.viewmodel.AuthViewModel
 import com.pave.driversapp.util.SafeLaunchedEffect
@@ -47,7 +49,10 @@ fun ScheduleOrdersScreen(
     android.util.Log.d("ScheduleOrdersScreen", "👑 UserRole: $userRole")
     
     val ordersRepository = remember { OrdersRepositoryImpl() }
-    val ordersViewModel: OrdersViewModel = viewModel { OrdersViewModel(ordersRepository) }
+    val membershipRepository = remember { MembershipRepositoryImpl(FirebaseFirestore.getInstance()) }
+    val ordersViewModel: OrdersViewModel = viewModel { 
+        OrdersViewModel(ordersRepository, membershipRepository) 
+    }
     val ordersUiState by ordersViewModel.uiState.collectAsStateWithLifecycle()
     
     android.util.Log.d("ScheduleOrdersScreen", "📊 OrdersUiState: isLoading=${ordersUiState.isLoading}, ordersCount=${ordersUiState.orders.size}")
@@ -59,7 +64,7 @@ fun ScheduleOrdersScreen(
     SafeLaunchedEffect(orgId, userRole) {
         android.util.Log.d("ScheduleOrdersScreen", "🚀 SafeLaunchedEffect triggered - initializing OrdersViewModel")
         android.util.Log.d("ScheduleOrdersScreen", "📋 Calling ordersViewModel.initialize($orgId, $userRole)")
-        ordersViewModel.initialize(orgId, userRole)
+        ordersViewModel.initialize(orgId, user?.userID ?: "")
     }
     
     // Monitor ordersUiState changes - only log when orders count changes
