@@ -4,6 +4,7 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -15,6 +16,9 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
+import android.Manifest
+import android.content.pm.PackageManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -112,6 +116,7 @@ fun OrderDetailsScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
+            .systemBarsPadding() // Add padding for mobile navigation bar
     ) {
         // Map Background with animations
         Box(
@@ -124,7 +129,8 @@ fun OrderDetailsScreen(
                 order = order,
                 currentLocation = uiState.currentLocation,
                 locationPoints = uiState.locationPoints,
-                depotSettings = depotSettings
+                depotSettings = depotSettings,
+                username = "Ramesh Dingalwar" // Use the username from the image as example
             )
         }
         
@@ -160,7 +166,9 @@ fun OrderDetailsScreen(
                 targetOffsetY = { it },
                 animationSpec = tween(400)
             ),
-            modifier = Modifier.align(Alignment.BottomCenter)
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 16.dp) // Add padding from mobile navigation bar
         ) {
             OrderDetailsBottomCard(
                 order = order,
@@ -279,45 +287,122 @@ fun OrderDetailsMap(
     order: Order,
     currentLocation: android.location.Location?,
     locationPoints: List<com.pave.driversapp.domain.model.LocationPoint>,
-    depotSettings: com.pave.driversapp.domain.model.DepotSettings?
+    depotSettings: com.pave.driversapp.domain.model.DepotSettings?,
+    username: String = "Driver" // Add username parameter
 ) {
-    val defaultLocation = LatLng(20.0, 77.0) // Default to India
-    val currentLatLng = currentLocation?.let { LatLng(it.latitude, it.longitude) } ?: defaultLocation
+    val context = LocalContext.current
     
-    val cameraPositionState = rememberCameraPositionState {
-        position = CameraPosition.fromLatLngZoom(currentLatLng, 15f)
+    // Check location permissions
+    val hasLocationPermission = remember {
+        ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED ||
+        ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.ACCESS_COARSE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
     }
     
-    // Update camera position when current location changes
+    // Debug logging for location permission
+    android.util.Log.d("OrderDetailsMap", "🔐 Location permission check: $hasLocationPermission")
+    android.util.Log.d("OrderDetailsMap", "📍 Current location: ${currentLocation?.latitude}, ${currentLocation?.longitude}")
+    android.util.Log.d("OrderDetailsMap", "📍 Current location accuracy: ${currentLocation?.accuracy}")
+    
+    // Always prioritize current location - wait for it if not available
+    val cameraPositionState = rememberCameraPositionState {
+        // Start with depot location as initial position
+        position = CameraPosition.fromLatLngZoom(
+            LatLng(19.97154, 79.23927), // Depot coordinates
+            15f
+        )
+    }
+    
+    // Update camera position when current location becomes available
     SafeLaunchedEffect(currentLocation) {
-        currentLocation?.let { location ->
-            val latLng = LatLng(location.latitude, location.longitude)
-            cameraPositionState.position = CameraPosition.fromLatLngZoom(latLng, 15f)
-            android.util.Log.d("OrderDetailsMap", "📍 Camera updated to current location: ${location.latitude}, ${location.longitude}")
+        if (currentLocation != null) {
+            val latLng = LatLng(currentLocation.latitude, currentLocation.longitude)
+            cameraPositionState.position = CameraPosition.fromLatLngZoom(latLng, 16f) // Higher zoom for better detail
+            android.util.Log.d("OrderDetailsMap", "📍 Camera updated to current location: ${currentLocation.latitude}, ${currentLocation.longitude}")
+        } else {
+            android.util.Log.d("OrderDetailsMap", "⏳ Waiting for current location...")
         }
     }
+    
+    // Current location for markers
+    val currentLatLng = currentLocation?.let { LatLng(it.latitude, it.longitude) }
+    android.util.Log.d("OrderDetailsMap", "📍 Current LatLng: $currentLatLng")
     
     GoogleMap(
         modifier = Modifier
             .fillMaxSize()
-            .padding(bottom = 200.dp), // Add padding to avoid overlap with bottom card
+            .padding(bottom = 220.dp), // Increased padding to account for system bars
         cameraPositionState = cameraPositionState,
         properties = MapProperties(
-            isMyLocationEnabled = true
+            isMyLocationEnabled = true // Always enable - let Google Maps handle permissions
         ),
         uiSettings = MapUiSettings(
-            myLocationButtonEnabled = true,
-            zoomControlsEnabled = false,
-            compassEnabled = true
+            myLocationButtonEnabled = true, // Always enable recenter button
+            zoomControlsEnabled = true, // Enable zoom controls for debugging
+            compassEnabled = true,
+            mapToolbarEnabled = true // Enable map toolbar
         )
     ) {
-        // Current location marker
+        // Current location marker - always show when available
         currentLatLng?.let { latLng ->
+            android.util.Log.d("OrderDetailsMap", "🎯 Rendering user location marker at: ${latLng.latitude}, ${latLng.longitude}")
+            
+            // Add a prominent circle around the marker like in the image
+            Circle(
+                center = latLng,
+                radius = 100.0, // Larger radius for better visibility
+                fillColor = Color.Blue.copy(alpha = 0.15f),
+                strokeColor = Color.Blue.copy(alpha = 0.4f),
+                strokeWidth = 3f
+            )
+            
+            // The actual marker with username
             Marker(
                 state = MarkerState(position = latLng),
-                title = "Your Location"
+                title = username, // Use username as title
+                snippet = "Current Position"
             )
         }
+        
+        // Show a fallback marker if no current location but we have location permission
+        if (currentLatLng == null && hasLocationPermission) {
+            android.util.Log.d("OrderDetailsMap", "🎯 Rendering fallback depot marker")
+            // Show depot location as fallback
+            val fallbackLocation = LatLng(19.97154, 79.23927)
+            Circle(
+                center = fallbackLocation,
+                radius = 50.0,
+                fillColor = Color.Gray.copy(alpha = 0.1f),
+                strokeColor = Color.Gray.copy(alpha = 0.3f),
+                strokeWidth = 2f
+            )
+            Marker(
+                state = MarkerState(position = fallbackLocation),
+                title = "Depot Location",
+                snippet = "Waiting for GPS..."
+            )
+        }
+        
+        // Debug: Always show a test marker to verify markers are working
+        val testLocation = LatLng(19.97154, 79.23927)
+        android.util.Log.d("OrderDetailsMap", "🎯 Rendering test marker at depot location")
+        Circle(
+            center = testLocation,
+            radius = 30.0,
+            fillColor = Color.Red.copy(alpha = 0.2f),
+            strokeColor = Color.Red.copy(alpha = 0.5f),
+            strokeWidth = 2f
+        )
+        Marker(
+            state = MarkerState(position = testLocation),
+            title = "Test Marker",
+            snippet = "Depot Location - Always Visible"
+        )
         
         // Depot circle
         depotSettings?.let { depot ->
@@ -351,6 +436,26 @@ fun OrderDetailsMap(
                 strokeWidth = 1f
             )
         }
+    }
+    
+    // Custom Recenter Button - Floating Action Button
+    FloatingActionButton(
+        onClick = {
+            // Recenter to current location or depot
+            val targetLocation = currentLatLng ?: LatLng(19.97154, 79.23927)
+            cameraPositionState.position = CameraPosition.fromLatLngZoom(targetLocation, 16f)
+            android.util.Log.d("OrderDetailsMap", "🔄 Custom recenter button clicked - recentering to: ${targetLocation.latitude}, ${targetLocation.longitude}")
+        },
+        modifier = Modifier
+            .padding(start = 16.dp, top = 80.dp), // Add top padding to move below header
+        containerColor = Color.White,
+        contentColor = Color.Blue
+    ) {
+        Icon(
+            imageVector = Icons.Filled.LocationOn,
+            contentDescription = "Recenter to my location",
+            tint = Color.Blue
+        )
     }
 }
 
@@ -396,12 +501,12 @@ fun OrderDetailsBottomCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 16.dp),
+            .padding(horizontal = 0.dp, vertical = 0.dp), // Remove padding for full width
         colors = CardDefaults.cardColors(
-            containerColor = Color(0xFF2C2C2C)
+            containerColor = Color(0xFF1A1A1A) // Darker background inspired by the image
         ),
-        shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 12.dp)
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp), // More rounded corners
+        elevation = CardDefaults.cardElevation(defaultElevation = 16.dp) // Higher elevation
     ) {
         Column(
             modifier = Modifier.padding(20.dp),
@@ -639,26 +744,28 @@ fun TripActionButton(
         enabled = buttonData.enabled && !isLoading,
         modifier = Modifier
             .fillMaxWidth()
+            .height(56.dp) // Fixed height inspired by the image
             .scale(buttonScale)
             .alpha(buttonAlpha),
         colors = ButtonDefaults.buttonColors(
             containerColor = buttonData.color,
-            disabledContainerColor = Color.Gray
+            disabledContainerColor = Color.Gray.copy(alpha = 0.3f)
         ),
-        shape = RoundedCornerShape(12.dp),
-        elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp)
+        shape = RoundedCornerShape(16.dp), // More rounded corners
+        elevation = ButtonDefaults.buttonElevation(defaultElevation = 8.dp) // Higher elevation
     ) {
         if (isLoading) {
             CircularProgressIndicator(
-                modifier = Modifier.size(20.dp),
-                color = Color.White
+                modifier = Modifier.size(24.dp), // Slightly larger
+                color = Color.White,
+                strokeWidth = 3.dp
             )
         } else {
             Text(
                 text = buttonData.text,
                 color = Color.White,
                 fontWeight = FontWeight.Bold,
-                fontSize = 16.sp
+                fontSize = 18.sp // Larger text
             )
         }
     }
