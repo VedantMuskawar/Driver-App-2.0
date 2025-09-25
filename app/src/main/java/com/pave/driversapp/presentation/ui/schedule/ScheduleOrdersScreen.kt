@@ -1,5 +1,7 @@
 package com.pave.driversapp.presentation.ui.schedule
 
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -12,6 +14,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -23,6 +27,7 @@ import com.pave.driversapp.domain.model.Order
 import com.pave.driversapp.domain.repository.OrdersRepositoryImpl
 import com.pave.driversapp.presentation.viewmodel.OrdersViewModel
 import com.pave.driversapp.presentation.viewmodel.AuthViewModel
+import com.pave.driversapp.util.SafeLaunchedEffect
 
 @Composable
 fun ScheduleOrdersScreen(
@@ -35,54 +40,124 @@ fun ScheduleOrdersScreen(
     val orgName = user?.orgName ?: uiState.authResult?.organizations?.find { it.orgID == orgId }?.orgName ?: "Organization"
     val userRole = user?.role ?: 0
     
+    android.util.Log.d("ScheduleOrdersScreen", "🔄 ScheduleOrdersScreen initialized")
+    android.util.Log.d("ScheduleOrdersScreen", "👤 User: ${user?.name}")
+    android.util.Log.d("ScheduleOrdersScreen", "🏢 OrgId: $orgId")
+    android.util.Log.d("ScheduleOrdersScreen", "🏢 OrgName: $orgName")
+    android.util.Log.d("ScheduleOrdersScreen", "👑 UserRole: $userRole")
+    
     val ordersRepository = remember { OrdersRepositoryImpl() }
     val ordersViewModel: OrdersViewModel = viewModel { OrdersViewModel(ordersRepository) }
     val ordersUiState by ordersViewModel.uiState.collectAsStateWithLifecycle()
     
+    android.util.Log.d("ScheduleOrdersScreen", "📊 OrdersUiState: isLoading=${ordersUiState.isLoading}, ordersCount=${ordersUiState.orders.size}")
+    android.util.Log.d("ScheduleOrdersScreen", "🚗 Available vehicles: ${ordersUiState.availableVehicles.size}")
+    android.util.Log.d("ScheduleOrdersScreen", "📅 Selected date: ${ordersUiState.selectedDate}")
+    android.util.Log.d("ScheduleOrdersScreen", "🚗 Selected vehicle: ${ordersUiState.selectedVehicle}")
+    
     // Initialize the orders view model
-    LaunchedEffect(orgId, userRole) {
+    SafeLaunchedEffect(orgId, userRole) {
+        android.util.Log.d("ScheduleOrdersScreen", "🚀 SafeLaunchedEffect triggered - initializing OrdersViewModel")
+        android.util.Log.d("ScheduleOrdersScreen", "📋 Calling ordersViewModel.initialize($orgId, $userRole)")
         ordersViewModel.initialize(orgId, userRole)
     }
     
+    // Monitor ordersUiState changes - only log when orders count changes
+    SafeLaunchedEffect(ordersUiState.orders.size, ordersUiState.isLoading) {
+        android.util.Log.d("ScheduleOrdersScreen", "📊 OrdersUiState changed:")
+        android.util.Log.d("ScheduleOrdersScreen", "   - isLoading: ${ordersUiState.isLoading}")
+        android.util.Log.d("ScheduleOrdersScreen", "   - orders count: ${ordersUiState.orders.size}")
+        android.util.Log.d("ScheduleOrdersScreen", "   - available vehicles: ${ordersUiState.availableVehicles.size}")
+        android.util.Log.d("ScheduleOrdersScreen", "   - selected date: ${ordersUiState.selectedDate}")
+        android.util.Log.d("ScheduleOrdersScreen", "   - selected vehicle: ${ordersUiState.selectedVehicle}")
+        android.util.Log.d("ScheduleOrdersScreen", "   - error message: ${ordersUiState.errorMessage}")
+        
+        if (ordersUiState.orders.isNotEmpty()) {
+            android.util.Log.d("ScheduleOrdersScreen", "📋 Orders found:")
+            ordersUiState.orders.forEachIndexed { index, order ->
+                android.util.Log.d("ScheduleOrdersScreen", "   Order $index: ${order.orderId} - ${order.clientName} - ${order.address}")
+            }
+        }
+    }
+    
+    // Animation states
+    val contentAlpha by animateFloatAsState(
+        targetValue = if (ordersUiState.isLoading) 0.6f else 1f,
+        animationSpec = tween(500),
+        label = "contentAlpha"
+    )
+    
+    val loadingScale by animateFloatAsState(
+        targetValue = if (ordersUiState.isLoading) 1.1f else 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
+        label = "loadingScale"
+    )
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
+            .alpha(contentAlpha)
     ) {
-        // Header (Uber-style)
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = Color.Black
-            ),
-            shape = RoundedCornerShape(0.dp)
+        // Header (Uber-style) with slide animation
+        AnimatedVisibility(
+            visible = true,
+            enter = slideInVertically(
+                initialOffsetY = { -it },
+                animationSpec = tween(600, easing = EaseOutCubic)
+            )
         ) {
-            Column(
-                modifier = Modifier.padding(20.dp)
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = Color.Black
+                ),
+                shape = RoundedCornerShape(0.dp)
             ) {
-                Text(
-                    text = "Orders",
-                    style = MaterialTheme.typography.headlineMedium,
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold
-                )
-                
-                Text(
-                    text = "${ordersUiState.orders.size} orders today",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Color.White.copy(alpha = 0.7f)
-                )
+                Column(
+                    modifier = Modifier.padding(20.dp)
+                ) {
+                    Text(
+                        text = "Orders",
+                        style = MaterialTheme.typography.headlineMedium,
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold
+                    )
+                    
+                    Text(
+                        text = "${ordersUiState.orders.size} orders today",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.White.copy(alpha = 0.7f)
+                    )
+                }
             }
         }
         
-        // Date Selector Row (Uber-style)
-        DateSelectorRow(
-            ordersViewModel = ordersViewModel,
-            userRole = userRole
-        )
+        // Date Selector Row (Uber-style) with slide animation
+        AnimatedVisibility(
+            visible = true,
+            enter = slideInVertically(
+                initialOffsetY = { -it },
+                animationSpec = tween(700, easing = EaseOutCubic)
+            )
+        ) {
+            DateSelectorRow(
+                ordersViewModel = ordersViewModel,
+                userRole = userRole
+            )
+        }
         
-        // Vehicle Filter Chips (Uber-style)
-        if (ordersViewModel.canUseVehicleFilter()) {
+        // Vehicle Filter Chips (Uber-style) with slide animation
+        AnimatedVisibility(
+            visible = ordersViewModel.canUseVehicleFilter(),
+            enter = slideInVertically(
+                initialOffsetY = { -it },
+                animationSpec = tween(800, easing = EaseOutCubic)
+            )
+        ) {
             VehicleFilterChips(
                 availableVehicles = ordersUiState.availableVehicles,
                 selectedVehicle = ordersUiState.selectedVehicle,
@@ -90,15 +165,50 @@ fun ScheduleOrdersScreen(
             )
         }
         
-        // Orders List (Uber-style)
-        if (ordersUiState.isLoading) {
+        // Orders List (Uber-style) with animations
+        AnimatedVisibility(
+            visible = ordersUiState.isLoading,
+            enter = fadeIn(animationSpec = tween(300)) + scaleIn(
+                initialScale = 0.8f,
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                    stiffness = Spring.StiffnessMedium
+                )
+            ),
+            exit = fadeOut(animationSpec = tween(200))
+        ) {
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
-                CircularProgressIndicator(color = Color.White)
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    CircularProgressIndicator(
+                        color = Color.White,
+                        modifier = Modifier.scale(loadingScale)
+                    )
+                    Text(
+                        text = "Loading orders...",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.White.copy(alpha = 0.7f)
+                    )
+                }
             }
-        } else if (ordersUiState.orders.isEmpty()) {
+        }
+        
+        AnimatedVisibility(
+            visible = !ordersUiState.isLoading && ordersUiState.orders.isEmpty(),
+            enter = fadeIn(animationSpec = tween(500)) + scaleIn(
+                initialScale = 0.9f,
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                    stiffness = Spring.StiffnessLow
+                )
+            ),
+            exit = fadeOut(animationSpec = tween(300))
+        ) {
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
@@ -126,17 +236,43 @@ fun ScheduleOrdersScreen(
                     )
                 }
             }
-        } else {
+        }
+        
+        AnimatedVisibility(
+            visible = !ordersUiState.isLoading && ordersUiState.orders.isNotEmpty(),
+            enter = fadeIn(animationSpec = tween(500)) + slideInVertically(
+                initialOffsetY = { it },
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                    stiffness = Spring.StiffnessLow
+                )
+            ),
+            exit = fadeOut(animationSpec = tween(300))
+        ) {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                items(ordersUiState.orders) { order ->
-                    OrderCard(
-                        order = order,
-                        onClick = { onOrderClick(order) }
-                    )
+                items(
+                    items = ordersUiState.orders,
+                    key = { order -> order.orderId } // Add key for better performance
+                ) { order ->
+                    AnimatedVisibility(
+                        visible = true,
+                        enter = fadeIn(animationSpec = tween(300)) + slideInVertically(
+                            initialOffsetY = { 50 },
+                            animationSpec = spring(
+                                dampingRatio = Spring.DampingRatioMediumBouncy,
+                                stiffness = Spring.StiffnessMedium
+                            )
+                        )
+                    ) {
+                        OrderCard(
+                            order = order,
+                            onClick = { onOrderClick(order) }
+                        )
+                    }
                 }
             }
         }
@@ -273,14 +409,34 @@ fun OrderCard(
     order: Order,
     onClick: () -> Unit
 ) {
+    // Animation states
+    var isPressed by remember { mutableStateOf(false) }
+    
+    val cardScale by animateFloatAsState(
+        targetValue = if (isPressed) 0.95f else 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessHigh
+        ),
+        label = "cardScale"
+    )
+    
+    val cardElevation by animateDpAsState(
+        targetValue = if (isPressed) 8.dp else 2.dp,
+        animationSpec = tween(200),
+        label = "cardElevation"
+    )
+    
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .scale(cardScale),
         onClick = onClick,
         colors = CardDefaults.cardColors(
             containerColor = Color(0xFF1E1E1E)
         ),
         shape = RoundedCornerShape(12.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = cardElevation)
     ) {
         Row(
             modifier = Modifier.padding(16.dp),

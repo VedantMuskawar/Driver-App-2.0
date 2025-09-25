@@ -1,5 +1,9 @@
 package com.pave.driversapp.presentation.viewmodel
 
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.pave.driversapp.domain.model.Order
@@ -51,6 +55,7 @@ class TripsViewModel(
     private var locationTrackingJob: kotlinx.coroutines.Job? = null
     private var elapsedTimeJob: kotlinx.coroutines.Job? = null
     private val locationManager = LocationManager(context)
+    private val debugLogger = com.pave.driversapp.util.TripDebugLogger(context)
     
     fun initialize(order: Order, driverId: String, orgId: String) {
         _uiState.value = _uiState.value.copy(
@@ -60,8 +65,24 @@ class TripsViewModel(
         
         viewModelScope.launch {
             try {
+                android.util.Log.d("TripsViewModel", "🔄 Initializing trip for order: ${order.orderId}")
+                
                 // Check for active trip
                 val activeTrip = tripsRepository.getActiveTrip(driverId)
+                android.util.Log.d("TripsViewModel", "📋 Active trip found: ${activeTrip?.tripId}")
+                
+                // Load existing location points if trip exists
+                if (activeTrip != null) {
+                    android.util.Log.d("TripsViewModel", "📍 Loading existing location points for trip: ${activeTrip.tripId}")
+                    
+                    // Collect location points from Firebase
+                    tripsRepository.getTripLocations(activeTrip.tripId).collect { locations ->
+                        android.util.Log.d("TripsViewModel", "📍 Loaded ${locations.size} location points")
+                        _uiState.value = _uiState.value.copy(
+                            locationPoints = locations
+                        )
+                    }
+                }
                 
                 // Check depot location
                 val depotResult = depotRepository.getDepot(orgId)
@@ -93,6 +114,7 @@ class TripsViewModel(
                 }
                 
             } catch (e: Exception) {
+                android.util.Log.e("TripsViewModel", "❌ Error initializing trip: ${e.message}")
                 _uiState.value = _uiState.value.copy(
                     error = e.message,
                     isLoading = false
@@ -106,10 +128,18 @@ class TripsViewModel(
         val driverId = "current_driver_id" // Get from auth state
         val orgId = order.orgId
         
+        android.util.Log.d("TripsViewModel", "🚀 DISPATCH TRIP STARTED")
+        android.util.Log.d("TripsViewModel", "📋 Order: ${order.orderId} - ${order.clientName}")
+        android.util.Log.d("TripsViewModel", "👤 Driver: $driverId")
+        android.util.Log.d("TripsViewModel", "🏢 Org: $orgId")
+        android.util.Log.d("TripsViewModel", "🚗 Vehicle: ${order.vehicleNumber}")
+        android.util.Log.d("TripsViewModel", "📊 Initial Meter Reading: $initialMeterReading")
+        
         viewModelScope.launch {
             try {
                 _uiState.value = _uiState.value.copy(isLoading = true)
                 
+                android.util.Log.d("TripsViewModel", "🔄 Creating trip object...")
                 val trip = Trip(
                     tripId = "", // Will be set by repository
                     orderId = order.orderId,
@@ -123,9 +153,20 @@ class TripsViewModel(
                     updatedAt = com.google.firebase.Timestamp.now()
                 )
                 
+                android.util.Log.d("TripsViewModel", "💾 Saving trip to Firebase...")
                 val result = tripsRepository.createTrip(trip)
                 result.fold(
                     onSuccess = { tripId ->
+                        android.util.Log.d("TripsViewModel", "✅ Trip created successfully: $tripId")
+                        
+                        // Log to debug file
+                        viewModelScope.launch {
+                            debugLogger.logTripEvent("TRIP_DISPATCHED", trip.copy(tripId = tripId), mapOf(
+                                "initialMeterReading" to initialMeterReading,
+                                "timestamp" to System.currentTimeMillis()
+                            ))
+                        }
+                        
                         val createdTrip = trip.copy(tripId = tripId)
                         _uiState.value = _uiState.value.copy(
                             currentTrip = createdTrip,
@@ -138,12 +179,18 @@ class TripsViewModel(
                         
                         // Show success message
                         showSuccessDialog("Trip dispatched successfully! Location tracking started.")
+                        android.util.Log.d("TripsViewModel", "🎉 Trip dispatched successfully!")
                         
                         // Start location tracking service
+                        android.util.Log.d("TripsViewModel", "📍 Starting location tracking service...")
                         startLocationTrackingService(tripId)
                         startElapsedTimeTracking(createdTrip)
+                        
+                        // Start listening for location updates to update UI
+                        startLocationUpdatesListener(tripId)
                     },
                     onFailure = { error ->
+                        android.util.Log.e("TripsViewModel", "❌ Failed to create trip: ${error.message}")
                         _uiState.value = _uiState.value.copy(
                             error = error.message,
                             isLoading = false
@@ -151,6 +198,7 @@ class TripsViewModel(
                     }
                 )
             } catch (e: Exception) {
+                android.util.Log.e("TripsViewModel", "💥 Exception during dispatch: ${e.message}")
                 _uiState.value = _uiState.value.copy(
                     error = e.message,
                     isLoading = false
@@ -334,6 +382,18 @@ class TripsViewModel(
     private fun stopLocationTrackingService() {
         android.util.Log.d("TripsViewModel", "🛑 Stopping location tracking service")
         locationManager.stopLocationTrackingService()
+    }
+    
+    private fun startLocationUpdatesListener(tripId: String) {
+        android.util.Log.d("TripsViewModel", "👂 Starting location updates listener for trip: $tripId")
+        viewModelScope.launch {
+            tripsRepository.getTripLocations(tripId).collect { locations ->
+                android.util.Log.d("TripsViewModel", "📍 Received ${locations.size} location points from Firebase")
+                _uiState.value = _uiState.value.copy(
+                    locationPoints = locations
+                )
+            }
+        }
     }
     
     fun startLocationUpdates() {

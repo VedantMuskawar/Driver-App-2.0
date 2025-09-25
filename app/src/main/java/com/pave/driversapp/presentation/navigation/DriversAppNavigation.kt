@@ -12,6 +12,7 @@ import com.pave.driversapp.presentation.ui.main.MainTabScreen
 import com.pave.driversapp.presentation.ui.orgselect.OrgSelectScreen
 import com.pave.driversapp.presentation.ui.depot.DepotSetupScreen
 import com.pave.driversapp.presentation.ui.orders.OrderDetailsScreen
+import com.pave.driversapp.presentation.ui.orders.OrderDetailsScreenWithData
 import com.pave.driversapp.domain.model.Order
 import com.pave.driversapp.presentation.viewmodel.AuthViewModel
 import com.pave.driversapp.presentation.viewmodel.DepotViewModel
@@ -133,33 +134,14 @@ fun DriversAppNavigation(
             val orgId = uiState.selectedOrgId
             val driverId = user?.userID ?: ""
             
-            // Create a mock order for now - in real implementation, fetch from repository
-            val order = Order(
+            // Fetch the actual order from SCH_ORDERS collection
+            OrderDetailsScreenWithData(
                 orderId = orderId,
                 orgId = orgId,
-                clientName = "Test Client",
-                address = "Test Address",
-                regionName = "Test Region",
-                productName = "Test Product",
-                productQuant = 100,
-                productUnitPrice = 5.0,
-                vehicleNumber = "MH34 AP0148",
-                dispatchStart = "09:00",
-                dispatchEnd = "12:00",
-                dispatchDate = "2024-01-01",
-                paymentMethod = "Cash",
-                dispatchStatus = false,
-                deliveryStatus = false,
-                returnStatus = false
-            )
-            
-            OrderDetailsScreen(
-                order = order,
+                driverId = driverId,
                 onBack = {
                     navController.popBackStack()
-                },
-                driverId = driverId,
-                orgId = orgId
+                }
             )
         }
     }

@@ -41,6 +41,8 @@ data class OrdersFilter(
 data class OrdersUiState(
     val isLoading: Boolean = false,
     val orders: List<Order> = emptyList(),
+    val scheduledOrders: List<ScheduledOrder> = emptyList(),
+    val selectedScheduledOrder: ScheduledOrder? = null,
     val availableVehicles: List<String> = emptyList(),
     val selectedDate: String = "",
     val selectedVehicle: String? = null,

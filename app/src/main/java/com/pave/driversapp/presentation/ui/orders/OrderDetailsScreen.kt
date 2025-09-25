@@ -1,5 +1,7 @@
 package com.pave.driversapp.presentation.ui.orders
 
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -9,6 +11,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -18,15 +22,21 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
+import com.google.android.gms.maps.model.Dash
+import com.google.android.gms.maps.model.Gap
 import com.google.maps.android.compose.*
 import com.pave.driversapp.domain.model.Order
 import com.pave.driversapp.domain.model.TripStatus
 import com.pave.driversapp.data.repository.DepotRepositoryImpl
 import com.pave.driversapp.domain.repository.TripsRepositoryImpl
+import com.pave.driversapp.domain.repository.OrdersRepositoryImpl
+import com.pave.driversapp.domain.model.ScheduledOrder
 import com.pave.driversapp.presentation.viewmodel.TripsViewModel
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
+import com.pave.driversapp.util.SafeLaunchedEffect
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -52,7 +62,7 @@ fun OrderDetailsScreen(
     // Load depot settings
     var depotSettings by remember { mutableStateOf<com.pave.driversapp.domain.model.DepotSettings?>(null) }
     
-    LaunchedEffect(orgId) {
+    SafeLaunchedEffect(orgId) {
         depotRepository.getDepot(orgId).fold(
             onSuccess = { depot ->
                 depotSettings = depot
@@ -64,36 +74,92 @@ fun OrderDetailsScreen(
     }
     
     // Initialize the view model
-    LaunchedEffect(order) {
+    SafeLaunchedEffect(order) {
         tripsViewModel.initialize(order, driverId, orgId)
     }
     
     // Force location update when screen opens
-    LaunchedEffect(Unit) {
+    SafeLaunchedEffect(Unit) {
         tripsViewModel.startLocationUpdates()
     }
     
+    // Animation states
+    val mapAlpha by animateFloatAsState(
+        targetValue = if (uiState.currentLocation != null) 1f else 0.7f,
+        animationSpec = tween(800, easing = EaseInOutCubic),
+        label = "mapAlpha"
+    )
+    
+    val mapScale by animateFloatAsState(
+        targetValue = if (uiState.currentLocation != null) 1f else 0.95f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
+        label = "mapScale"
+    )
+    
+    val bottomCardOffset by animateDpAsState(
+        targetValue = if (uiState.showMeterReadingDialog || uiState.showDeliveryPhotoDialog || uiState.showCancelDialog || uiState.showSuccessDialog) 0.dp else 0.dp,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "bottomCardOffset"
+    )
+
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
     ) {
-        // Map Background
-        OrderDetailsMap(
-            order = order,
-            currentLocation = uiState.currentLocation,
-            locationPoints = uiState.locationPoints,
-            depotSettings = depotSettings
-        )
-        
-        // Top App Bar
-        OrderDetailsTopBar(
-            order = order,
-            onBack = onBack
-        )
-        
-        // Bottom Action Card - positioned at bottom
+        // Map Background with animations
         Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .alpha(mapAlpha)
+                .scale(mapScale)
+        ) {
+            OrderDetailsMap(
+                order = order,
+                currentLocation = uiState.currentLocation,
+                locationPoints = uiState.locationPoints,
+                depotSettings = depotSettings
+            )
+        }
+        
+        // Top App Bar with slide animation
+        AnimatedVisibility(
+            visible = true,
+            enter = slideInVertically(
+                initialOffsetY = { -it },
+                animationSpec = tween(600, easing = EaseOutCubic)
+            ),
+            exit = slideOutVertically(
+                targetOffsetY = { -it },
+                animationSpec = tween(300)
+            )
+        ) {
+            OrderDetailsTopBar(
+                order = order,
+                onBack = onBack
+            )
+        }
+        
+        // Bottom Action Card - positioned at bottom with slide animation
+        AnimatedVisibility(
+            visible = true,
+            enter = slideInVertically(
+                initialOffsetY = { it },
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                    stiffness = Spring.StiffnessLow
+                )
+            ),
+            exit = slideOutVertically(
+                targetOffsetY = { it },
+                animationSpec = tween(400)
+            ),
             modifier = Modifier.align(Alignment.BottomCenter)
         ) {
             OrderDetailsBottomCard(
@@ -106,8 +172,21 @@ fun OrderDetailsScreen(
             )
         }
         
-        // Dialogs
-        if (uiState.showMeterReadingDialog) {
+        // Dialogs with animations
+        AnimatedVisibility(
+            visible = uiState.showMeterReadingDialog,
+            enter = fadeIn(animationSpec = tween(300)) + scaleIn(
+                initialScale = 0.8f,
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                    stiffness = Spring.StiffnessMedium
+                )
+            ),
+            exit = fadeOut(animationSpec = tween(200)) + scaleOut(
+                targetScale = 0.8f,
+                animationSpec = tween(200)
+            )
+        ) {
             MeterReadingDialog(
                 isInitial = uiState.tripStatus == null,
                 meterReading = uiState.meterReading,
@@ -123,7 +202,20 @@ fun OrderDetailsScreen(
             )
         }
         
-        if (uiState.showDeliveryPhotoDialog) {
+        AnimatedVisibility(
+            visible = uiState.showDeliveryPhotoDialog,
+            enter = fadeIn(animationSpec = tween(300)) + scaleIn(
+                initialScale = 0.8f,
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                    stiffness = Spring.StiffnessMedium
+                )
+            ),
+            exit = fadeOut(animationSpec = tween(200)) + scaleOut(
+                targetScale = 0.8f,
+                animationSpec = tween(200)
+            )
+        ) {
             DeliveryPhotoDialog(
                 onPhotoSelected = { imageUri ->
                     tripsViewModel.markDelivered(imageUri)
@@ -132,14 +224,40 @@ fun OrderDetailsScreen(
             )
         }
         
-        if (uiState.showCancelDialog) {
+        AnimatedVisibility(
+            visible = uiState.showCancelDialog,
+            enter = fadeIn(animationSpec = tween(300)) + scaleIn(
+                initialScale = 0.8f,
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                    stiffness = Spring.StiffnessMedium
+                )
+            ),
+            exit = fadeOut(animationSpec = tween(200)) + scaleOut(
+                targetScale = 0.8f,
+                animationSpec = tween(200)
+            )
+        ) {
             CancelTripDialog(
                 onConfirm = { tripsViewModel.cancelTrip(driverId) },
                 onDismiss = tripsViewModel::hideCancelDialog
             )
         }
         
-        if (uiState.showSuccessDialog) {
+        AnimatedVisibility(
+            visible = uiState.showSuccessDialog,
+            enter = fadeIn(animationSpec = tween(300)) + scaleIn(
+                initialScale = 0.8f,
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                    stiffness = Spring.StiffnessMedium
+                )
+            ),
+            exit = fadeOut(animationSpec = tween(200)) + scaleOut(
+                targetScale = 0.8f,
+                animationSpec = tween(200)
+            )
+        ) {
             SuccessDialog(
                 message = uiState.successMessage,
                 onDismiss = tripsViewModel::hideSuccessDialog
@@ -148,7 +266,7 @@ fun OrderDetailsScreen(
         
         // Error Snackbar
         uiState.error?.let { error ->
-            LaunchedEffect(error) {
+            SafeLaunchedEffect(error) {
                 // Show error message
                 tripsViewModel.clearError()
             }
@@ -171,7 +289,7 @@ fun OrderDetailsMap(
     }
     
     // Update camera position when current location changes
-    LaunchedEffect(currentLocation) {
+    SafeLaunchedEffect(currentLocation) {
         currentLocation?.let { location ->
             val latLng = LatLng(location.latitude, location.longitude)
             cameraPositionState.position = CameraPosition.fromLatLngZoom(latLng, 15f)
@@ -212,12 +330,25 @@ fun OrderDetailsMap(
             )
         }
         
-        // Trip route markers (location dots)
-        locationPoints.forEachIndexed { index, point ->
-            Marker(
-                state = MarkerState(position = LatLng(point.lat, point.lng)),
-                title = "Location ${index + 1}",
-                snippet = "Tracked at ${point.timestamp?.toDate()?.toString() ?: "Unknown time"}"
+        // Trip route polylines (connect location points)
+        if (locationPoints.size > 1) {
+            val routePoints = locationPoints.map { LatLng(it.lat, it.lng) }
+            Polyline(
+                points = routePoints,
+                color = Color.Blue,
+                width = 4f,
+                pattern = listOf(Dash(10f), Gap(5f))
+            )
+        }
+        
+        // Small dots for location points - clean and minimal
+        locationPoints.forEach { point ->
+            Circle(
+                center = LatLng(point.lat, point.lng),
+                radius = 3.0, // Small radius for minimal visual impact
+                fillColor = Color.Red.copy(alpha = 0.6f), // Semi-transparent red
+                strokeColor = Color.Red.copy(alpha = 0.8f), // Slightly more opaque border
+                strokeWidth = 1f
             )
         }
     }
@@ -283,12 +414,18 @@ fun OrderDetailsBottomCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = when (uiState.tripStatus) {
-                        null -> "Ready to Dispatch"
-                        TripStatus.DISPATCHED -> "In Transit"
-                        TripStatus.DELIVERED -> "Delivered"
-                        TripStatus.RETURNED -> "Completed"
-                        TripStatus.CANCELLED -> "Cancelled"
+                    text = when {
+                        // If order is already delivered, show delivered status
+                        order.deliveryStatus -> "Order Delivered"
+                        // If order is dispatched but not delivered
+                        order.dispatchStatus && !order.deliveryStatus -> "In Transit"
+                        // If trip is in progress
+                        uiState.tripStatus == TripStatus.DISPATCHED -> "In Transit"
+                        uiState.tripStatus == TripStatus.DELIVERED -> "Delivered"
+                        uiState.tripStatus == TripStatus.RETURNED -> "Completed"
+                        uiState.tripStatus == TripStatus.CANCELLED -> "Cancelled"
+                        // Default: ready to dispatch
+                        else -> "Ready to Dispatch"
                     },
                     color = Color.White,
                     fontSize = 20.sp,
@@ -310,6 +447,7 @@ fun OrderDetailsBottomCard(
             // Primary Action Button
             TripActionButton(
                 tripStatus = uiState.tripStatus,
+                order = order, // Pass the order to check actual order status
                 isInsideDepot = uiState.isInsideDepot,
                 isLoading = uiState.isLoading,
                 onDispatch = onDispatch,
@@ -317,8 +455,8 @@ fun OrderDetailsBottomCard(
                 onReturn = onReturn
             )
             
-            // Secondary Actions (Cancel)
-            if (uiState.tripStatus != null && uiState.tripStatus != TripStatus.RETURNED) {
+            // Secondary Actions (Cancel) - only show if order is not delivered and trip is not completed
+            if (!order.deliveryStatus && uiState.tripStatus != null && uiState.tripStatus != TripStatus.RETURNED) {
                 TextButton(
                     onClick = onCancel,
                     modifier = Modifier.fillMaxWidth()
@@ -405,29 +543,43 @@ fun InfoRow(
 @Composable
 fun TripActionButton(
     tripStatus: TripStatus?,
+    order: Order, // Add order parameter to check actual order status
     isInsideDepot: Boolean,
     isLoading: Boolean,
     onDispatch: () -> Unit,
     onDelivered: () -> Unit,
     onReturn: () -> Unit
 ) {
-    val buttonData = when (tripStatus) {
-        null -> {
-            val canDispatch = isInsideDepot
+    val buttonData = when {
+        // If order is already delivered, show appropriate status
+        order.deliveryStatus -> {
             ButtonData(
-                text = "Dispatch",
-                color = if (canDispatch) Color.Green else Color.Gray,
-                onClick = onDispatch,
-                enabled = canDispatch
+                text = "Order Delivered",
+                color = Color.Green,
+                onClick = { },
+                enabled = false
             )
         }
-        TripStatus.DISPATCHED -> ButtonData(
-            text = "Mark Delivered",
-            color = Color(0xFFFF9800), // Orange
-            onClick = onDelivered,
-            enabled = true
-        )
-        TripStatus.DELIVERED -> {
+        // If order is already dispatched but not delivered
+        order.dispatchStatus && !order.deliveryStatus -> {
+            ButtonData(
+                text = "Mark Delivered",
+                color = Color(0xFFFF9800), // Orange
+                onClick = onDelivered,
+                enabled = true
+            )
+        }
+        // If trip is in progress (dispatched)
+        tripStatus == TripStatus.DISPATCHED -> {
+            ButtonData(
+                text = "Mark Delivered",
+                color = Color(0xFFFF9800), // Orange
+                onClick = onDelivered,
+                enabled = true
+            )
+        }
+        // If trip is delivered
+        tripStatus == TripStatus.DELIVERED -> {
             val canReturn = isInsideDepot
             ButtonData(
                 text = "Return to Depot",
@@ -436,24 +588,59 @@ fun TripActionButton(
                 enabled = canReturn
             )
         }
-        TripStatus.RETURNED -> ButtonData(
-            text = "Trip Completed",
-            color = Color.Gray,
-            onClick = { },
-            enabled = false
-        )
-        TripStatus.CANCELLED -> ButtonData(
-            text = "Trip Cancelled",
-            color = Color.Red,
-            onClick = { },
-            enabled = false
-        )
+        // If trip is returned
+        tripStatus == TripStatus.RETURNED -> {
+            ButtonData(
+                text = "Trip Completed",
+                color = Color.Gray,
+                onClick = { },
+                enabled = false
+            )
+        }
+        // If trip is cancelled
+        tripStatus == TripStatus.CANCELLED -> {
+            ButtonData(
+                text = "Trip Cancelled",
+                color = Color.Red,
+                onClick = { },
+                enabled = false
+            )
+        }
+        // Default case: order is ready to dispatch (not dispatched yet)
+        else -> {
+            val canDispatch = isInsideDepot && !order.dispatchStatus
+            ButtonData(
+                text = "Dispatch",
+                color = if (canDispatch) Color.Green else Color.Gray,
+                onClick = onDispatch,
+                enabled = canDispatch
+            )
+        }
     }
+    
+    // Animation for button state changes
+    val buttonScale by animateFloatAsState(
+        targetValue = if (buttonData.enabled && !isLoading) 1f else 0.95f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium
+        ),
+        label = "buttonScale"
+    )
+    
+    val buttonAlpha by animateFloatAsState(
+        targetValue = if (buttonData.enabled && !isLoading) 1f else 0.7f,
+        animationSpec = tween(300),
+        label = "buttonAlpha"
+    )
     
     Button(
         onClick = buttonData.onClick,
         enabled = buttonData.enabled && !isLoading,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .scale(buttonScale)
+            .alpha(buttonAlpha),
         colors = ButtonDefaults.buttonColors(
             containerColor = buttonData.color,
             disabledContainerColor = Color.Gray
@@ -721,6 +908,148 @@ private fun getTripStatusText(tripStatus: TripStatus?): String {
         TripStatus.DELIVERED -> "Delivered"
         TripStatus.RETURNED -> "Completed"
         TripStatus.CANCELLED -> "Cancelled"
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun OrderDetailsScreenWithData(
+    orderId: String,
+    orgId: String,
+    driverId: String,
+    onBack: () -> Unit
+) {
+    val context = LocalContext.current
+    val firestore = FirebaseFirestore.getInstance()
+    val fusedLocationClient = LocationServices.getFusedLocationProviderClient(context)
+    
+    val tripsRepository = remember { TripsRepositoryImpl(firestore, context) }
+    val depotRepository = remember { DepotRepositoryImpl(firestore, context) }
+    val ordersRepository = remember { OrdersRepositoryImpl() }
+    
+    // State for the fetched order
+    var order by remember { mutableStateOf<Order?>(null) }
+    var isLoading by remember { mutableStateOf(true) }
+    var error by remember { mutableStateOf<String?>(null) }
+    
+    // Fetch order data from SCH_ORDERS
+    SafeLaunchedEffect(orderId) {
+        try {
+            android.util.Log.d("OrderDetailsScreenWithData", "🔄 Fetching order data for orderId: $orderId")
+            
+            // First try to get as ScheduledOrder
+            val scheduledOrder = ordersRepository.getScheduledOrderById(orderId)
+            if (scheduledOrder != null) {
+                android.util.Log.d("OrderDetailsScreenWithData", "✅ Found ScheduledOrder: ${scheduledOrder.clientName}")
+                
+                // Convert ScheduledOrder to Order format
+                order = Order(
+                    orderId = scheduledOrder.orderId,
+                    orgId = scheduledOrder.orgID,
+                    clientName = scheduledOrder.clientName,
+                    address = scheduledOrder.address,
+                    regionName = scheduledOrder.regionName,
+                    productName = scheduledOrder.productName,
+                    productQuant = scheduledOrder.productQuant,
+                    productUnitPrice = scheduledOrder.productUnitPrice,
+                    vehicleNumber = scheduledOrder.vehicleNumber,
+                    dispatchStart = scheduledOrder.dispatchStart?.toDate()?.let { 
+                        java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(it) 
+                    } ?: "00:00",
+                    dispatchEnd = scheduledOrder.dispatchEnd?.toDate()?.let { 
+                        java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(it) 
+                    } ?: "23:59",
+                    dispatchDate = scheduledOrder.deliveryDate?.toDate()?.let { 
+                        java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(it) 
+                    } ?: "",
+                    paymentMethod = scheduledOrder.paySchedule,
+                    dispatchStatus = scheduledOrder.dispatchStatus,
+                    deliveryStatus = scheduledOrder.deliveryStatus,
+                    returnStatus = scheduledOrder.paymentStatus
+                )
+                isLoading = false
+            } else {
+                // Fallback: try to get as regular Order
+                val regularOrder = ordersRepository.getOrderById(orderId)
+                if (regularOrder != null) {
+                    android.util.Log.d("OrderDetailsScreenWithData", "✅ Found regular Order: ${regularOrder.clientName}")
+                    order = regularOrder
+                    isLoading = false
+                } else {
+                    android.util.Log.e("OrderDetailsScreenWithData", "❌ Order not found: $orderId")
+                    error = "Order not found"
+                    isLoading = false
+                }
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("OrderDetailsScreenWithData", "💥 Error fetching order: ${e.message}")
+            error = "Error loading order: ${e.message}"
+            isLoading = false
+        }
+    }
+    
+    // Show loading state
+    if (isLoading) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                CircularProgressIndicator(color = Color.White)
+                Text(
+                    text = "Loading order details...",
+                    color = Color.White,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+        }
+    }
+    // Show error state
+    else if (error != null) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Warning,
+                    contentDescription = "Error",
+                    tint = Color.Red,
+                    modifier = Modifier.size(64.dp)
+                )
+                Text(
+                    text = error ?: "Unknown error",
+                    color = Color.White,
+                    style = MaterialTheme.typography.bodyMedium,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                )
+                Button(
+                    onClick = onBack,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.Blue)
+                ) {
+                    Text("Go Back", color = Color.White)
+                }
+            }
+        }
+    }
+    // Show order details
+    else if (order != null) {
+        OrderDetailsScreen(
+            order = order!!,
+            onBack = onBack,
+            driverId = driverId,
+            orgId = orgId
+        )
     }
 }
 

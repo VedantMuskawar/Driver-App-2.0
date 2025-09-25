@@ -21,8 +21,10 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.pave.driversapp.domain.model.Order
+import com.pave.driversapp.domain.model.ScheduledOrder
 import com.pave.driversapp.domain.repository.OrdersRepositoryImpl
 import com.pave.driversapp.presentation.viewmodel.OrdersViewModel
+import com.pave.driversapp.presentation.ui.components.ScheduledOrderCard
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -31,7 +33,8 @@ fun OrdersDashboardScreen(
     orgName: String,
     userRole: Int,
     onBack: () -> Unit,
-    onOrderClick: (Order) -> Unit = {}
+    onOrderClick: (Order) -> Unit = {},
+    onScheduledOrderClick: (ScheduledOrder) -> Unit = {}
 ) {
     val ordersRepository = remember { OrdersRepositoryImpl() }
     val ordersViewModel: OrdersViewModel = viewModel { OrdersViewModel(ordersRepository) }
@@ -40,6 +43,16 @@ fun OrdersDashboardScreen(
     // Initialize the view model
     LaunchedEffect(orgId, userRole) {
         ordersViewModel.initialize(orgId, userRole)
+    }
+    
+    // Tab state for switching between orders and scheduled orders
+    var selectedTab by remember { mutableStateOf(0) }
+    
+    // Load scheduled orders when tab is switched
+    LaunchedEffect(selectedTab) {
+        if (selectedTab == 1) {
+            ordersViewModel.loadScheduledOrders(uiState.selectedDate, uiState.selectedVehicle)
+        }
     }
     
     Column(
@@ -93,42 +106,138 @@ fun OrdersDashboardScreen(
                 )
             }
             
-            // Orders Grid (Two Column Layout)
-            if (uiState.isLoading) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator(color = Color.White)
-                }
-            } else if (uiState.orders.isEmpty()) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.List,
-                            contentDescription = "No orders",
-                            tint = Color.White.copy(alpha = 0.5f),
-                            modifier = Modifier.size(64.dp)
-                        )
+            // Tab Row for Orders and Scheduled Orders
+            TabRow(
+                selectedTabIndex = selectedTab,
+                containerColor = Color(0xFF1E1E1E),
+                contentColor = Color.White
+            ) {
+                Tab(
+                    selected = selectedTab == 0,
+                    onClick = { selectedTab = 0 },
+                    text = {
                         Text(
-                            text = "No orders found for selected date",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = Color.White.copy(alpha = 0.7f)
+                            text = "Orders",
+                            color = if (selectedTab == 0) Color.White else Color.Gray
+                        )
+                    }
+                )
+                Tab(
+                    selected = selectedTab == 1,
+                    onClick = { selectedTab = 1 },
+                    text = {
+                        Text(
+                            text = "SCH Orders",
+                            color = if (selectedTab == 1) Color.White else Color.Gray
+                        )
+                    }
+                )
+            }
+            
+            // Content based on selected tab
+            when (selectedTab) {
+                0 -> {
+                    // Regular Orders Grid (Two Column Layout)
+                    if (uiState.isLoading) {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(color = Color(0xFF4CAF50))
+                        }
+                    } else if (uiState.orders.isEmpty()) {
+                        EmptyOrdersState()
+                    } else {
+                        OrdersGrid(
+                            orders = uiState.orders,
+                            onOrderClick = onOrderClick
                         )
                     }
                 }
-            } else {
-                OrdersGrid(
-                    orders = uiState.orders,
-                    onOrderClick = onOrderClick
-                )
+                1 -> {
+                    // Scheduled Orders List
+                    if (uiState.isLoading) {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(color = Color(0xFF4CAF50))
+                        }
+                    } else if (uiState.scheduledOrders.isEmpty()) {
+                        EmptyScheduledOrdersState()
+                    } else {
+                        ScheduledOrdersList(
+                            scheduledOrders = uiState.scheduledOrders,
+                            onScheduledOrderClick = onScheduledOrderClick
+                        )
+                    }
+                }
             }
+        }
+    }
+}
+
+@Composable
+fun EmptyOrdersState() {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Filled.List,
+                contentDescription = "No orders",
+                tint = Color.White.copy(alpha = 0.5f),
+                modifier = Modifier.size(64.dp)
+            )
+            Text(
+                text = "No orders found for selected date",
+                style = MaterialTheme.typography.bodyLarge,
+                color = Color.White.copy(alpha = 0.7f)
+            )
+        }
+    }
+}
+
+@Composable
+fun EmptyScheduledOrdersState() {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Text(
+                text = "📅",
+                fontSize = 64.sp
+            )
+            Text(
+                text = "No scheduled orders found for selected date",
+                style = MaterialTheme.typography.bodyLarge,
+                color = Color.White.copy(alpha = 0.7f)
+            )
+        }
+    }
+}
+
+@Composable
+fun ScheduledOrdersList(
+    scheduledOrders: List<ScheduledOrder>,
+    onScheduledOrderClick: (ScheduledOrder) -> Unit
+) {
+    LazyColumn(
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        items(scheduledOrders) { scheduledOrder ->
+            ScheduledOrderCard(
+                scheduledOrder = scheduledOrder,
+                onClick = { onScheduledOrderClick(scheduledOrder) }
+            )
         }
     }
 }

@@ -3,6 +3,7 @@ package com.pave.driversapp.presentation.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.pave.driversapp.domain.model.Order
+import com.pave.driversapp.domain.model.ScheduledOrder
 import com.pave.driversapp.domain.model.OrdersUiState
 import com.pave.driversapp.domain.repository.OrdersRepository
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -23,14 +24,18 @@ class OrdersViewModel(
     private var currentUserRole: Int = 0
     
     fun initialize(orgId: String, userRole: Int) {
+        android.util.Log.d("OrdersViewModel", "🚀 initialize() called with orgId: $orgId, userRole: $userRole")
         currentOrgId = orgId
         currentUserRole = userRole
         
         // Set initial date to today
         val today = getCurrentDateString()
+        android.util.Log.d("OrdersViewModel", "📅 Setting initial date to: $today")
         _uiState.value = _uiState.value.copy(selectedDate = today)
         
+        android.util.Log.d("OrdersViewModel", "📋 Calling loadOrders($today)")
         loadOrders(today)
+        android.util.Log.d("OrdersViewModel", "🚗 Calling loadAvailableVehicles()")
         loadAvailableVehicles()
     }
     
@@ -38,6 +43,7 @@ class OrdersViewModel(
         if (isDateAccessible(date)) {
             _uiState.value = _uiState.value.copy(selectedDate = date)
             loadOrders(date)
+            loadAvailableVehicles() // Reload vehicles for the new date
         }
     }
     
@@ -47,17 +53,28 @@ class OrdersViewModel(
     }
     
     private fun loadOrders(date: String, vehicleNumber: String? = null) {
+        android.util.Log.d("OrdersViewModel", "📋 loadOrders() called with date: $date, vehicle: $vehicleNumber, orgId: $currentOrgId")
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, errorMessage = null)
+            android.util.Log.d("OrdersViewModel", "⏳ Set loading = true")
             
             try {
+                android.util.Log.d("OrdersViewModel", "📡 Starting to collect orders from repository...")
                 ordersRepository.getOrders(currentOrgId, date, vehicleNumber).collect { orders ->
+                    android.util.Log.d("OrdersViewModel", "📊 Received ${orders.size} orders from repository")
+                    orders.forEachIndexed { index, order ->
+                        android.util.Log.d("OrdersViewModel", "   Order $index: ${order.orderId} - ${order.clientName} - ${order.address}")
+                    }
                     _uiState.value = _uiState.value.copy(
                         orders = orders,
                         isLoading = false
                     )
+                    android.util.Log.d("OrdersViewModel", "✅ Updated UI state with ${orders.size} orders, loading = false")
                 }
             } catch (e: Exception) {
+                android.util.Log.e("OrdersViewModel", "💥 Error in loadOrders: ${e.message}")
+                android.util.Log.e("OrdersViewModel", "💥 Exception type: ${e.javaClass.simpleName}")
+                android.util.Log.e("OrdersViewModel", "💥 Stack trace: ${e.stackTrace.joinToString("\n")}")
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
                     errorMessage = e.message ?: "Failed to load orders"
@@ -67,11 +84,21 @@ class OrdersViewModel(
     }
     
     private fun loadAvailableVehicles() {
+        android.util.Log.d("OrdersViewModel", "🚗 loadAvailableVehicles() called for orgId: $currentOrgId, date: ${_uiState.value.selectedDate}")
         viewModelScope.launch {
             try {
-                val vehicles = ordersRepository.getAvailableVehicles(currentOrgId)
+                android.util.Log.d("OrdersViewModel", "📡 Calling ordersRepository.getAvailableVehicles($currentOrgId, ${_uiState.value.selectedDate})")
+                val vehicles = ordersRepository.getAvailableVehicles(currentOrgId, _uiState.value.selectedDate)
+                android.util.Log.d("OrdersViewModel", "🚗 Received ${vehicles.size} vehicles from repository")
+                vehicles.forEachIndexed { index, vehicle ->
+                    android.util.Log.d("OrdersViewModel", "   Vehicle $index: $vehicle")
+                }
                 _uiState.value = _uiState.value.copy(availableVehicles = vehicles)
+                android.util.Log.d("OrdersViewModel", "✅ Updated UI state with ${vehicles.size} vehicles")
             } catch (e: Exception) {
+                android.util.Log.e("OrdersViewModel", "💥 Error in loadAvailableVehicles: ${e.message}")
+                android.util.Log.e("OrdersViewModel", "💥 Exception type: ${e.javaClass.simpleName}")
+                android.util.Log.e("OrdersViewModel", "💥 Stack trace: ${e.stackTrace.joinToString("\n")}")
                 // Handle error silently for vehicles
             }
         }
@@ -79,6 +106,52 @@ class OrdersViewModel(
     
     fun refreshOrders() {
         loadOrders(_uiState.value.selectedDate, _uiState.value.selectedVehicle)
+        loadAvailableVehicles() // Reload vehicles for the current date
+    }
+    
+    // SCH_ORDERS methods
+    fun loadScheduledOrders(date: String, vehicleNumber: String? = null) {
+        android.util.Log.d("OrdersViewModel", "🔄 loadScheduledOrders called with date: $date, vehicle: $vehicleNumber, orgId: $currentOrgId")
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isLoading = true, errorMessage = null)
+            
+            try {
+                android.util.Log.d("OrdersViewModel", "📡 Starting to collect SCH_ORDERS from repository...")
+                ordersRepository.getScheduledOrders(currentOrgId, date, vehicleNumber).collect { scheduledOrders ->
+                    android.util.Log.d("OrdersViewModel", "📊 Received ${scheduledOrders.size} scheduled orders from repository")
+                    scheduledOrders.forEach { order ->
+                        android.util.Log.d("OrdersViewModel", "📋 ViewModel received order: ${order.orderId} - ${order.clientName}")
+                    }
+                    _uiState.value = _uiState.value.copy(
+                        scheduledOrders = scheduledOrders,
+                        isLoading = false
+                    )
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("OrdersViewModel", "💥 Error in loadScheduledOrders: ${e.message}")
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    errorMessage = e.message ?: "Failed to load scheduled orders"
+                )
+            }
+        }
+    }
+    
+    fun refreshScheduledOrders() {
+        loadScheduledOrders(_uiState.value.selectedDate, _uiState.value.selectedVehicle)
+    }
+    
+    fun getScheduledOrderById(orderId: String) {
+        viewModelScope.launch {
+            try {
+                val scheduledOrder = ordersRepository.getScheduledOrderById(orderId)
+                _uiState.value = _uiState.value.copy(selectedScheduledOrder = scheduledOrder)
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    errorMessage = e.message ?: "Failed to load scheduled order details"
+                )
+            }
+        }
     }
     
     // Role-based access control

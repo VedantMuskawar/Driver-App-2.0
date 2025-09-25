@@ -167,9 +167,25 @@ class TripsRepositoryImpl(
     }
     
     override suspend fun getTripLocations(tripId: String): Flow<List<LocationPoint>> {
-        return kotlinx.coroutines.flow.flow {
-            // Simplified implementation for now
-            emit(emptyList<LocationPoint>())
+        return try {
+            locationsCollection
+                .document(tripId)
+                .collection("LOCATIONS")
+                .orderBy("timestamp", com.google.firebase.firestore.Query.Direction.ASCENDING)
+                .snapshots()
+                .map { snapshot ->
+                    snapshot.documents.mapNotNull { document ->
+                        try {
+                            document.toObject(LocationPoint::class.java)
+                        } catch (e: Exception) {
+                            android.util.Log.e("TripsRepository", "❌ Error parsing location document ${document.id}: ${e.message}")
+                            null
+                        }
+                    }
+                }
+        } catch (e: Exception) {
+            android.util.Log.e("TripsRepository", "❌ Error setting up location listener: ${e.message}")
+            kotlinx.coroutines.flow.flowOf(emptyList())
         }
     }
     

@@ -25,6 +25,7 @@ class LocationTrackingService : Service() {
     private var currentTripId: String? = null
     private var isTracking = false
     private var serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private var debugLogger: com.pave.driversapp.util.TripDebugLogger? = null
     
     // Location tracking parameters
     private val locationRequest = LocationRequest.Builder(
@@ -45,7 +46,15 @@ class LocationTrackingService : Service() {
         android.util.Log.d("LocationService", "🚀 LocationTrackingService created")
         
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this)
+        debugLogger = com.pave.driversapp.util.TripDebugLogger(this)
         createNotificationChannel()
+        
+        // Log service creation
+        serviceScope.launch {
+            debugLogger?.logServiceEvent("SERVICE_CREATED", mapOf(
+                "timestamp" to System.currentTimeMillis()
+            ))
+        }
         
         locationCallback = object : LocationCallback() {
             override fun onLocationResult(locationResult: LocationResult) {
@@ -59,6 +68,25 @@ class LocationTrackingService : Service() {
     
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         android.util.Log.d("LocationService", "📡 LocationTrackingService started")
+        
+        // Extract tripId from intent
+        val tripId = intent?.getStringExtra("tripId")
+        android.util.Log.d("LocationService", "📍 Received tripId: $tripId")
+        
+        if (tripId != null) {
+            // Initialize tripsRepository (we'll need to get this from the application)
+            val application = application as? com.pave.driversapp.DriversAppApplication
+            val tripsRepository = application?.tripsRepository
+            android.util.Log.d("LocationService", "📋 TripsRepository: ${if (tripsRepository != null) "Available" else "Not available"}")
+            
+            if (tripsRepository != null) {
+                startTracking(tripId, tripsRepository)
+            } else {
+                android.util.Log.e("LocationService", "❌ TripsRepository not available")
+            }
+        } else {
+            android.util.Log.e("LocationService", "❌ No tripId provided in intent")
+        }
         
         try {
             val notification = createNotification()
@@ -85,11 +113,16 @@ class LocationTrackingService : Service() {
     }
     
     fun startTracking(tripId: String, tripsRepository: TripsRepository) {
-        android.util.Log.d("LocationService", "📍 Starting location tracking for trip: $tripId")
+        android.util.Log.d("LocationService", "📍 STARTING LOCATION TRACKING")
+        android.util.Log.d("LocationService", "🆔 Trip ID: $tripId")
+        android.util.Log.d("LocationService", "📋 Repository: ${if (tripsRepository != null) "Available" else "Null"}")
         
         this.currentTripId = tripId
         this.tripsRepository = tripsRepository
         this.isTracking = true
+        
+        android.util.Log.d("LocationService", "✅ Tracking state set to: $isTracking")
+        android.util.Log.d("LocationService", "🔄 Starting location updates...")
         
         startLocationUpdates()
     }
@@ -132,25 +165,43 @@ class LocationTrackingService : Service() {
     }
     
     private fun handleLocationUpdate(location: Location) {
+        android.util.Log.d("LocationService", "📍 LOCATION UPDATE RECEIVED")
+        android.util.Log.d("LocationService", "🔄 Tracking: $isTracking, TripId: $currentTripId")
+        android.util.Log.d("LocationService", "🌍 Location: ${location.latitude}, ${location.longitude}")
+        android.util.Log.d("LocationService", "⏰ Time: ${location.time}")
+        android.util.Log.d("LocationService", "🎯 Accuracy: ${location.accuracy}m")
+        
         if (!isTracking || currentTripId == null) {
+            android.util.Log.w("LocationService", "⚠️ Not tracking or no trip ID - ignoring location")
             return
         }
         
-        android.util.Log.d("LocationService", "📍 Location update: ${location.latitude}, ${location.longitude}")
-        
+        android.util.Log.d("LocationService", "✅ Processing location update...")
         val locationPoint = LocationPoint(
             lat = location.latitude,
             lng = location.longitude,
             timestamp = com.google.firebase.Timestamp.now()
         )
         
-        // Save location point to repository
+        android.util.Log.d("LocationService", "💾 Saving location point to Firebase...")
         serviceScope.launch {
             try {
                 tripsRepository?.addLocationPoint(currentTripId!!, locationPoint)
-                android.util.Log.d("LocationService", "✅ Location point saved")
+                android.util.Log.d("LocationService", "✅ Location point saved successfully")
+                
+                // Log to debug file
+                debugLogger?.logLocationUpdate(locationPoint, currentTripId!!)
             } catch (e: Exception) {
                 android.util.Log.e("LocationService", "❌ Error saving location point: ${e.message}")
+                android.util.Log.e("LocationService", "❌ Exception type: ${e.javaClass.simpleName}")
+                
+                // Log error to debug file
+                debugLogger?.logServiceEvent("LOCATION_SAVE_ERROR", mapOf(
+                    "error" to (e.message ?: "Unknown error"),
+                    "exceptionType" to e.javaClass.simpleName,
+                    "tripId" to (currentTripId ?: "Unknown"),
+                    "location" to "${locationPoint.lat},${locationPoint.lng}"
+                ))
             }
         }
     }

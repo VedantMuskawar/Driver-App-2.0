@@ -38,10 +38,13 @@ enum class TripStatus {
 
 @Serializable
 data class LocationPoint(
-    val lat: Double,
-    val lng: Double,
+    val lat: Double = 0.0,
+    val lng: Double = 0.0,
     @Contextual val timestamp: Timestamp? = null
-)
+) {
+    // No-argument constructor for Firebase
+    constructor() : this(0.0, 0.0, null)
+}
 
 @Serializable
 data class TripMetrics(
