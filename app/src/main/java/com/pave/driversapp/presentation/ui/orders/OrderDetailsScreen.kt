@@ -3,6 +3,7 @@ package com.pave.driversapp.presentation.ui.orders
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -516,7 +517,11 @@ fun OrderDetailsBottomCard(
             containerColor = Color(0xFF1E1E1E)
         ),
         shape = RoundedCornerShape(20.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
+        border = BorderStroke(
+            width = 1.dp,
+            color = Color(0xFF2C2C2C)
+        )
     ) {
         Column(
             modifier = Modifier.padding(24.dp),
@@ -699,7 +704,7 @@ fun TripActionButton(
         order.deliveryStatus -> {
             ButtonData(
                 text = "Order Delivered",
-                color = Color.Green,
+                color = Color(0xFF4CAF50), // Green
                 onClick = { },
                 enabled = false
             )
@@ -708,7 +713,7 @@ fun TripActionButton(
         order.dispatchStatus && !order.deliveryStatus -> {
             ButtonData(
                 text = "Mark Delivered",
-                color = Color(0xFFFF9800), // Orange
+                color = Color(0xFF2196F3), // Blue for deliver
                 onClick = onDelivered,
                 enabled = true
             )
@@ -717,7 +722,7 @@ fun TripActionButton(
         tripStatus == TripStatus.DISPATCHED -> {
             ButtonData(
                 text = "Mark Delivered",
-                color = Color(0xFFFF9800), // Orange
+                color = Color(0xFF2196F3), // Blue for deliver
                 onClick = onDelivered,
                 enabled = true
             )
@@ -727,7 +732,7 @@ fun TripActionButton(
             val canReturn = isInsideDepot
             ButtonData(
                 text = "Return to Depot",
-                color = if (canReturn) Color.Blue else Color.Gray,
+                color = if (canReturn) Color(0xFFFF9800) else Color.Gray, // Orange for return
                 onClick = onReturn,
                 enabled = canReturn
             )
@@ -745,7 +750,7 @@ fun TripActionButton(
         tripStatus == TripStatus.CANCELLED -> {
             ButtonData(
                 text = "Trip Cancelled",
-                color = Color.Red,
+                color = Color(0xFFF44336), // Red for Cancel
                 onClick = { },
                 enabled = false
             )
@@ -755,7 +760,7 @@ fun TripActionButton(
             val canDispatch = isInsideDepot && !order.dispatchStatus
             ButtonData(
                 text = "Dispatch",
-                color = if (canDispatch) Color.Green else Color.Gray,
+                color = if (canDispatch) Color(0xFF4CAF50) else Color.Gray, // Green for dispatch
                 onClick = onDispatch,
                 enabled = canDispatch
             )
@@ -783,16 +788,16 @@ fun TripActionButton(
         enabled = buttonData.enabled && !isLoading,
         modifier = Modifier
             .fillMaxWidth()
-            .height(56.dp)
+            .height(48.dp)
             .scale(buttonScale)
             .alpha(buttonAlpha),
         colors = ButtonDefaults.buttonColors(
-            containerColor = if (buttonData.enabled) buttonData.color else Color.Gray.copy(alpha = 0.3f),
+            containerColor = buttonData.color,
             disabledContainerColor = Color.Gray.copy(alpha = 0.3f)
         ),
         shape = RoundedCornerShape(14.dp),
         elevation = ButtonDefaults.buttonElevation(
-            defaultElevation = if (buttonData.enabled && !isLoading) 4.dp else 0.dp
+            defaultElevation = if (buttonData.enabled && !isLoading) 8.dp else 0.dp
         )
     ) {
         if (isLoading) {
@@ -808,7 +813,7 @@ fun TripActionButton(
                 Text(
                     text = "Processing...",
                     color = Color.White,
-                    fontWeight = FontWeight.Medium,
+                    fontWeight = FontWeight.Bold,
                     fontSize = 16.sp
                 )
             }
@@ -818,31 +823,55 @@ fun TripActionButton(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 when (buttonData.text) {
-                    "Dispatch" -> Icon(
-                        imageVector = Icons.Filled.PlayArrow,
-                        contentDescription = "Dispatch",
-                        tint = Color.White,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    "Mark Delivered" -> Icon(
-                        imageVector = Icons.Filled.CheckCircle,
-                        contentDescription = "Delivered",
-                        tint = Color.White,
-                        modifier = Modifier.size(20.dp)
-                    )
-                    "Return to Depot" -> Icon(
-                        imageVector = Icons.Filled.Home,
-                        contentDescription = "Return",
+                    "Dispatch", "Order Ready for Dispatch" -> {
+                        Icon(
+                            imageVector = Icons.Filled.PlayArrow,
+                            contentDescription = "Dispatch",
+                            tint = Color.White,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Text(
+                            text = buttonData.text,
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp
+                        )
+                    }
+                    "Mark Delivered", "Order Delivered" -> {
+                        Icon(
+                            imageVector = Icons.Filled.CheckCircle,
+                            contentDescription = "Delivered",
+                            tint = Color.White,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Text(
+                            text = buttonData.text,
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp
+                        )
+                    }
+                    "Return to Depot", "Trip Completed" -> {
+                        Icon(
+                            imageVector = Icons.Filled.Home,
+                            contentDescription = "Return",
+                            tint = Color.White,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Text(
+                            text = buttonData.text,
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp
+                        )
+                    }
+                    else -> Icon(
+                        imageVector = Icons.Filled.Close,
+                        contentDescription = "Cancel",
                         tint = Color.White,
                         modifier = Modifier.size(20.dp)
                     )
                 }
-                Text(
-                    text = buttonData.text,
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp
-                )
             }
         }
     }

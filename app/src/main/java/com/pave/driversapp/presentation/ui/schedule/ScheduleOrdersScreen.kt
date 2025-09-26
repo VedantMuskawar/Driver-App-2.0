@@ -3,6 +3,8 @@ package com.pave.driversapp.presentation.ui.schedule
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -17,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -256,8 +259,8 @@ fun ScheduleOrdersScreen(
         ) {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 items(
                     items = ordersUiState.orders,
@@ -426,29 +429,36 @@ fun OrderCard(
         label = "cardScale"
     )
     
-    val cardElevation by animateDpAsState(
-        targetValue = if (isPressed) 8.dp else 4.dp,
-        animationSpec = tween(200),
-        label = "cardElevation"
-    )
-    
-    // Get status-based background color
+    // Animate status background color
     val statusBackgroundColor = getOrderStatusBackgroundColor(order)
     val statusText = getOrderStatusText(order)
     
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .scale(cardScale),
-        onClick = onClick,
+            .scale(cardScale)
+            .clickable { onClick() },
         colors = CardDefaults.cardColors(
-            containerColor = statusBackgroundColor
+            containerColor = Color(0xFF1E1E1E)
         ),
-        shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = cardElevation)
+        shape = RoundedCornerShape(20.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
+        border = BorderStroke(
+            width = 1.dp,
+            color = Color(0xFF2C2C2C)
+        )
     ) {
         Column(
-            modifier = Modifier.padding(16.dp)
+            modifier = Modifier
+                .background(
+                    brush = androidx.compose.ui.graphics.Brush.verticalGradient(
+                        colors = listOf(
+                            statusBackgroundColor.copy(alpha = 0.8f),
+                            statusBackgroundColor
+                        )
+                    )
+                )
+                .padding(16.dp)
         ) {
             // Header row with customer name and status badge
             Row(
@@ -456,12 +466,11 @@ fun OrderCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = order.clientName,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold
-                )
+Text(
+            text = order.clientName,
+            style = MaterialTheme.typography.titleMedium,
+            color = Color.White
+        )
                 
                 // Status badge
                 Card(
@@ -472,9 +481,9 @@ fun OrderCard(
                 ) {
                     Text(
                         text = statusText,
-                        style = MaterialTheme.typography.bodySmall,
                         color = Color.White,
-                        fontWeight = FontWeight.Medium,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                     )
                 }
@@ -490,8 +499,9 @@ fun OrderCard(
                 // Location
                 Text(
                     text = "${order.address}, ${order.regionName}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Color.White.copy(alpha = 0.9f),
+                    color = Color.White.copy(alpha = 0.7f),
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Medium,
                     maxLines = 1,
                     modifier = Modifier.weight(1f)
                 )
@@ -499,8 +509,8 @@ fun OrderCard(
                 // Vehicle
                 Text(
                     text = order.vehicleNumber,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Color.White,
+                    color = Color.White.copy(alpha = 0.7f),
+                    fontSize = 16.sp,
                     fontWeight = FontWeight.Medium
                 )
             }
@@ -516,8 +526,8 @@ fun OrderCard(
                 // Product info
                 Text(
                     text = "${order.productName} • Qty: ${order.productQuant}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Color.White,
+                    color = Color.White.copy(alpha = 0.7f),
+                    fontSize = 16.sp,
                     fontWeight = FontWeight.Medium
                 )
                 
@@ -527,15 +537,16 @@ fun OrderCard(
                 ) {
                     Text(
                         text = "Rs ${order.totalAmount.toInt()}",
-                        style = MaterialTheme.typography.titleMedium,
                         color = Color.White,
+                        fontSize = 16.sp,
                         fontWeight = FontWeight.Bold
                     )
                     
                     Text(
                         text = if (order.paymentMethod.contains("POD", ignoreCase = true)) "Cash" else if (order.paymentMethod.contains("PL", ignoreCase = true)) "Credit" else order.paymentMethod,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color.White.copy(alpha = 0.8f)
+                        color = Color.White.copy(alpha = 0.7f),
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Medium
                     )
                 }
             }
@@ -545,8 +556,9 @@ fun OrderCard(
             // Time slot 
             Text(
                 text = order.timeSlot,
-                style = MaterialTheme.typography.bodySmall,
-                color = Color.White.copy(alpha = 0.8f)
+                color = Color.White.copy(alpha = 0.7f),
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Medium
             )
         }
     }

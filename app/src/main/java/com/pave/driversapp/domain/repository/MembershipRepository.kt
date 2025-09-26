@@ -24,9 +24,8 @@ class MembershipRepositoryImpl(
             android.util.Log.d("MembershipRepository", "🔍 Fetching membership for userId: $userId, orgId: $orgId")
             
             val snapshot = membershipCollection
-                .whereEqualTo("userId", userId)
-                .whereEqualTo("orgId", orgId)
-                .whereEqualTo("isActive", true)
+                .whereEqualTo("userID", userId)  // Match actual field name in your document
+                .whereEqualTo("orgID", orgId)    // Match actual field name in your document
                 .limit(1)
                 .get()
                 .await()
@@ -49,14 +48,30 @@ class MembershipRepositoryImpl(
     }
     
     override suspend fun getUserRole(userId: String, orgId: String): UserRole? {
-        val membership = getMembership(userId, orgId)
-        if (membership != null) {
-            return membership.userRole
+        return try {
+            android.util.Log.d("MembershipRepository", "🔍 Fetching user role for userId: $userId, orgId: $orgId")
+            
+            val snapshot = membershipCollection
+                .whereEqualTo("userID", userId)
+                .whereEqualTo("orgID", orgId)
+                .limit(1)
+                .get()
+                .await()
+            
+            val document = snapshot.documents.firstOrNull()
+            if (document != null) {
+                val role = document.getLong("role")?.toInt() ?: 2
+                val userRole = UserRole.fromValue(role) ?: UserRole.DRIVER
+                android.util.Log.d("MembershipRepository", "👤 Found user role: ${userRole.displayName} ($role)")
+                userRole
+            } else {
+                android.util.Log.w("MembershipRepository", "⚠️ Membership document not found, trying fallback")
+                getUserRoleFromUserModel(userId, orgId)
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("MembershipRepository", "❌ Error fetching user role: ${e.message}")
+            getUserRoleFromUserModel(userId, orgId)
         }
-        
-        // Fallback: Try to get role from User model
-        android.util.Log.w("MembershipRepository", "⚠️ Membership not found, trying fallback role detection")
-        return getUserRoleFromUserModel(userId, orgId)
     }
     
     override suspend fun getUserRoleFromUserModel(userId: String, orgId: String): UserRole? {
@@ -90,14 +105,39 @@ class MembershipRepositoryImpl(
     }
     
     override suspend fun getDriverVehicleId(userId: String, orgId: String): String? {
-        val membership = getMembership(userId, orgId)
-        if (membership != null && membership.isDriver) {
-            return membership.vehicleId
+        return try {
+            android.util.Log.d("MembershipRepository", "🔍 Fetching driver vehicleId for userId: $userId, orgId: $orgId")
+            
+            val snapshot = membershipCollection
+                .whereEqualTo("userID", userId)
+                .whereEqualTo("orgID", orgId)
+                .limit(1)
+                .get()
+                .await()
+            
+            val document = snapshot.documents.firstOrNull()
+            if (document != null) {
+                val vehicleId = document.getString("vehicleID")
+                val role = document.getLong("role")?.toInt() ?: 2
+                
+                android.util.Log.d("MembershipRepository", "🚗 Found vehicleID: $vehicleId for role: $role")
+                
+                // Return vehicleId if user is a driver, null otherwise
+                if (role == 2 && vehicleId != null) {
+                    android.util.Log.d("MembershipRepository", "✅ Driver vehicle retrieved: $vehicleId")
+                    vehicleId
+                } else {
+                    android.util.Log.d("MembershipRepository", "ℹ️ User not a driver or no vehicleId")
+                    null
+                }
+            } else {
+                android.util.Log.w("MembershipRepository", "⚠️ Membership document not found")
+                null
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("MembershipRepository", "❌ Error fetching driver vehicle ID: ${e.message}")
+            null
         }
-        
-        // Fallback: For testing, return a default vehicle ID
-        android.util.Log.w("MembershipRepository", "⚠️ Driver vehicle ID not found in membership, using fallback")
-        return "xhEn4S62VCz6wm5b57La" // This matches one of the vehicles in SCH_ORDERS
     }
     
     override suspend fun isUserActive(userId: String, orgId: String): Boolean {

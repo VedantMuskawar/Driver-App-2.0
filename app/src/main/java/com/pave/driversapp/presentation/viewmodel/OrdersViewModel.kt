@@ -8,7 +8,6 @@ import com.pave.driversapp.domain.model.OrdersUiState
 import com.pave.driversapp.domain.model.UserRole
 import com.pave.driversapp.domain.repository.OrdersRepository
 import com.pave.driversapp.domain.repository.MembershipRepository
-import com.pave.driversapp.util.MembershipTestData
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -36,12 +35,7 @@ class OrdersViewModel(
         
         viewModelScope.launch {
             try {
-                // Check if membership data exists, create if not
-                val membershipExists = MembershipTestData.checkMembershipData(userId, orgId)
-                if (!membershipExists) {
-                    android.util.Log.d("OrdersViewModel", "🔧 Creating sample membership data for testing...")
-                    MembershipTestData.createSampleMembershipData()
-                }
+                // Membership data must exist in Firestore for production users
                 
                 // Get user role and permissions
                 currentUserRole = membershipRepository.getUserRole(userId, orgId)

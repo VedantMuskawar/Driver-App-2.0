@@ -24,7 +24,7 @@ class FirestoreDataSource(
                 android.util.Log.d("FirestoreDataSource", "📄 Sample doc ${doc.id}: ${doc.data}")
             }
             
-            // Try the original phone number format first
+            // Query by phone number in member.phoneNumber field
             val result = firestore.collection("MEMBERSHIP")
                 .whereEqualTo("member.phoneNumber", phoneNumber)
                 .get()
@@ -35,7 +35,12 @@ class FirestoreDataSource(
             val users = result.documents.mapNotNull { document ->
                 try {
                     android.util.Log.d("FirestoreDataSource", "📄 Processing document: ${document.id}")
+                    android.util.Log.d("FirestoreDataSource", "📊 Document data: ${document.data}")
+                    
+                    // Extract member data
                     val memberData = document.get("member") as? Map<String, Any>
+                    android.util.Log.d("FirestoreDataSource", "👥 Member data: $memberData")
+                    
                     val user = User(
                         userID = document.getString("userID") ?: "",
                         name = memberData?.get("name") as? String ?: "",
@@ -44,7 +49,7 @@ class FirestoreDataSource(
                         orgName = document.getString("orgName") ?: "",
                         role = document.getLong("role")?.toInt() ?: 2
                     )
-                    android.util.Log.d("FirestoreDataSource", "👤 Created user: ${user.name} (${user.phoneNumber})")
+                    android.util.Log.d("FirestoreDataSource", "👤 Created user: ${user.name} (${user.phoneNumber}) Role: ${user.role}")
                     user
                 } catch (e: Exception) {
                     android.util.Log.e("FirestoreDataSource", "❌ Error processing document: ${e.message}")
