@@ -470,7 +470,8 @@ fun OrderDetailsTopBar(
             Text(
                 text = order.clientName,
                 color = Color.White,
-                fontWeight = FontWeight.Bold
+                fontWeight = FontWeight.Bold,
+                fontSize = 18.sp
             )
         },
         navigationIcon = {
@@ -482,8 +483,17 @@ fun OrderDetailsTopBar(
                 )
             }
         },
+        actions = {
+            IconButton(onClick = { /* Compass/Orientation functionality */ }) {
+                Icon(
+                    imageVector = Icons.Filled.Settings,
+                    contentDescription = "Settings",
+                    tint = Color.White
+                )
+            }
+        },
         colors = TopAppBarDefaults.topAppBarColors(
-            containerColor = Color.Black.copy(alpha = 0.8f)
+            containerColor = Color(0xFF2C2C2C)
         )
     )
 }
@@ -501,58 +511,77 @@ fun OrderDetailsBottomCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 0.dp, vertical = 0.dp), // Remove padding for full width
+            .padding(horizontal = 16.dp, vertical = 8.dp),
         colors = CardDefaults.cardColors(
-            containerColor = Color(0xFF1A1A1A) // Darker background inspired by the image
+            containerColor = Color(0xFF1E1E1E)
         ),
-        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp), // More rounded corners
-        elevation = CardDefaults.cardElevation(defaultElevation = 16.dp) // Higher elevation
+        shape = RoundedCornerShape(20.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
     ) {
         Column(
-            modifier = Modifier.padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            modifier = Modifier.padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            // Trip Status Header
+            // Trip Status Header with enhanced styling
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = when {
-                        // If order is already delivered, show delivered status
-                        order.deliveryStatus -> "Order Delivered"
-                        // If order is dispatched but not delivered
-                        order.dispatchStatus && !order.deliveryStatus -> "In Transit"
-                        // If trip is in progress
-                        uiState.tripStatus == TripStatus.DISPATCHED -> "In Transit"
-                        uiState.tripStatus == TripStatus.DELIVERED -> "Delivered"
-                        uiState.tripStatus == TripStatus.RETURNED -> "Completed"
-                        uiState.tripStatus == TripStatus.CANCELLED -> "Cancelled"
-                        // Default: ready to dispatch
-                        else -> "Ready to Dispatch"
-                    },
-                    color = Color.White,
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold
-                )
+                val statusText = when {
+                    order.deliveryStatus -> "Order Delivered"
+                    order.dispatchStatus && !order.deliveryStatus -> "In Transit"
+                    uiState.tripStatus == TripStatus.DISPATCHED -> "In Transit"
+                    uiState.tripStatus == TripStatus.DELIVERED -> "Delivered"
+                    uiState.tripStatus == TripStatus.RETURNED -> "Completed"
+                    uiState.tripStatus == TripStatus.CANCELLED -> "Cancelled"
+                    else -> "Ready to Dispatch"
+                }
+                
+                val statusColor = when {
+                    order.deliveryStatus -> Color(0xFF38A169)
+                    order.dispatchStatus && !order.deliveryStatus -> Color(0xFFFF9800)
+                    uiState.tripStatus == TripStatus.DISPATCHED -> Color(0xFF2196F3)
+                    uiState.tripStatus == TripStatus.DELIVERED -> Color(0xFF38A169)
+                    uiState.tripStatus == TripStatus.RETURNED -> Color(0xFF9C27B0)
+                    uiState.tripStatus == TripStatus.CANCELLED -> Color(0xFFE53E3E)
+                    else -> Color(0xFF6B7280)
+                }
+                
+                Row(
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .background(statusColor, RoundedCornerShape(4.dp))
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = statusText,
+                        color = Color.White,
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
                 
                 if (uiState.elapsedTime > 0) {
                     Text(
                         text = "${uiState.elapsedTime}m",
                         color = Color.Gray,
-                        fontSize = 14.sp
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium
                     )
                 }
             }
             
-            // Order Details
+            // Order Details with enhanced layout
             OrderDetailsInfo(order = order)
             
             // Primary Action Button
             TripActionButton(
                 tripStatus = uiState.tripStatus,
-                order = order, // Pass the order to check actual order status
+                order = order,
                 isInsideDepot = uiState.isInsideDepot,
                 isLoading = uiState.isLoading,
                 onDispatch = onDispatch,
@@ -560,15 +589,26 @@ fun OrderDetailsBottomCard(
                 onReturn = onReturn
             )
             
-            // Secondary Actions (Cancel) - only show if order is not delivered and trip is not completed
+            // Secondary Actions
             if (!order.deliveryStatus && uiState.tripStatus != null && uiState.tripStatus != TripStatus.RETURNED) {
-                TextButton(
+                OutlinedButton(
                     onClick = onCancel,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = Color(0xFFE53E3E),
+                        containerColor = Color.Transparent
+                    ),
+                    border = androidx.compose.foundation.BorderStroke(
+                        width = 1.dp,
+                        color = Color(0xFFE53E3E)
+                    ),
+                    shape = RoundedCornerShape(12.dp)
                 ) {
                     Text(
                         text = "Cancel Trip",
-                        color = Color.Red
+                        fontWeight = FontWeight.Medium
                     )
                 }
             }
@@ -579,7 +619,7 @@ fun OrderDetailsBottomCard(
 @Composable
 fun OrderDetailsInfo(order: Order) {
     Column(
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         InfoRow(
             icon = Icons.Filled.Home,
@@ -589,24 +629,10 @@ fun OrderDetailsInfo(order: Order) {
         )
         
         InfoRow(
-            icon = Icons.Filled.Build,
-            label = "Product",
-            value = "${order.productName} (${order.productQuant} units)",
-            iconColor = Color(0xFF2196F3)
-        )
-        
-        InfoRow(
             icon = Icons.Filled.LocationOn,
             label = "Address",
             value = "${order.address}, ${order.regionName}",
             iconColor = Color(0xFFFF9800)
-        )
-        
-        InfoRow(
-            icon = Icons.Filled.List,
-            label = "Time Slot",
-            value = "${order.dispatchStart} - ${order.dispatchEnd}",
-            iconColor = Color(0xFF9C27B0)
         )
     }
 }
@@ -620,26 +646,39 @@ fun InfoRow(
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
+        horizontalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = label,
-            tint = iconColor,
-            modifier = Modifier.size(20.dp)
-        )
+        Card(
+            colors = CardDefaults.cardColors(
+                containerColor = iconColor.copy(alpha = 0.15f)
+            ),
+            shape = RoundedCornerShape(10.dp)
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = label,
+                tint = iconColor,
+                modifier = Modifier
+                    .size(24.dp)
+                    .padding(8.dp)
+            )
+        }
         
-        Column {
+        Column(
+            modifier = Modifier.weight(1f)
+        ) {
             Text(
                 text = label,
                 color = Color.Gray,
-                fontSize = 12.sp
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium
             )
             Text(
                 text = value,
                 color = Color.White,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Medium
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Medium,
+                maxLines = 2
             )
         }
     }
@@ -744,29 +783,67 @@ fun TripActionButton(
         enabled = buttonData.enabled && !isLoading,
         modifier = Modifier
             .fillMaxWidth()
-            .height(56.dp) // Fixed height inspired by the image
+            .height(56.dp)
             .scale(buttonScale)
             .alpha(buttonAlpha),
         colors = ButtonDefaults.buttonColors(
-            containerColor = buttonData.color,
+            containerColor = if (buttonData.enabled) buttonData.color else Color.Gray.copy(alpha = 0.3f),
             disabledContainerColor = Color.Gray.copy(alpha = 0.3f)
         ),
-        shape = RoundedCornerShape(16.dp), // More rounded corners
-        elevation = ButtonDefaults.buttonElevation(defaultElevation = 8.dp) // Higher elevation
+        shape = RoundedCornerShape(14.dp),
+        elevation = ButtonDefaults.buttonElevation(
+            defaultElevation = if (buttonData.enabled && !isLoading) 4.dp else 0.dp
+        )
     ) {
         if (isLoading) {
-            CircularProgressIndicator(
-                modifier = Modifier.size(24.dp), // Slightly larger
-                color = Color.White,
-                strokeWidth = 3.dp
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(20.dp),
+                    color = Color.White,
+                    strokeWidth = 2.dp
+                )
+                Text(
+                    text = "Processing...",
+                    color = Color.White,
+                    fontWeight = FontWeight.Medium,
+                    fontSize = 16.sp
+                )
+            }
         } else {
-            Text(
-                text = buttonData.text,
-                color = Color.White,
-                fontWeight = FontWeight.Bold,
-                fontSize = 18.sp // Larger text
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                when (buttonData.text) {
+                    "Dispatch" -> Icon(
+                        imageVector = Icons.Filled.PlayArrow,
+                        contentDescription = "Dispatch",
+                        tint = Color.White,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    "Mark Delivered" -> Icon(
+                        imageVector = Icons.Filled.CheckCircle,
+                        contentDescription = "Delivered",
+                        tint = Color.White,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    "Return to Depot" -> Icon(
+                        imageVector = Icons.Filled.Home,
+                        contentDescription = "Return",
+                        tint = Color.White,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                Text(
+                    text = buttonData.text,
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp
+                )
+            }
         }
     }
 }

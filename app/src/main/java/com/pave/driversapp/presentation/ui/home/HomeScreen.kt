@@ -11,16 +11,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.pave.driversapp.presentation.ui.components.GeofenceEnforcedDispatchButton
-import com.pave.driversapp.presentation.ui.components.GeofenceEnforcedReturnButton
-import com.pave.driversapp.data.repository.DepotRepositoryImpl
-import com.google.firebase.firestore.FirebaseFirestore
 import com.pave.driversapp.presentation.viewmodel.AuthViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -33,11 +28,6 @@ fun HomeScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val user = uiState.authResult?.user
-    val context = LocalContext.current
-    val orgId = uiState.selectedOrgId
-
-    // Create depot repository for geofence enforcement
-    val depotRepository = remember { DepotRepositoryImpl(FirebaseFirestore.getInstance(), context) }
 
     Column(
         modifier = Modifier
@@ -81,64 +71,6 @@ fun HomeScreen(
             }
         }
 
-        // Quick Actions (Uber-style)
-        Text(
-            text = "Quick Actions",
-            style = MaterialTheme.typography.titleLarge,
-            color = Color.White,
-            fontWeight = FontWeight.Bold
-        )
-
-        // Driver actions with geofence enforcement
-        if (user?.role == 2) { // Driver role
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = Color(0xFF1E1E1E)
-                ),
-                shape = RoundedCornerShape(16.dp),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-            ) {
-                Column(
-                    modifier = Modifier.padding(20.dp)
-                ) {
-                    Text(
-                        text = "Driver Actions",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold
-                    )
-                    
-                    Spacer(modifier = Modifier.height(16.dp))
-                    
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        GeofenceEnforcedDispatchButton(
-                            orgId = orgId,
-                            depotRepository = depotRepository,
-                            onDispatch = {
-                                // Handle dispatch action
-                                android.util.Log.d("HomeScreen", "🚚 Dispatch action triggered")
-                            },
-                            modifier = Modifier.weight(1f)
-                        )
-
-                        GeofenceEnforcedReturnButton(
-                            orgId = orgId,
-                            depotRepository = depotRepository,
-                            onReturn = {
-                                // Handle return action
-                                android.util.Log.d("HomeScreen", "🏠 Return action triggered")
-                            },
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                }
-            }
-        }
-
         // Stats Cards (Uber-style)
         Text(
             text = "Today's Overview",
@@ -176,49 +108,6 @@ fun HomeScreen(
             )
         }
 
-        // Recent Activity (Uber-style)
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = Color(0xFF1E1E1E)
-            ),
-            shape = RoundedCornerShape(16.dp),
-            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-        ) {
-            Column(
-                modifier = Modifier.padding(20.dp)
-            ) {
-                Text(
-                    text = "Recent Activity",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold
-                )
-                
-                Spacer(modifier = Modifier.height(16.dp))
-                
-                ActivityItem(
-                    icon = Icons.Filled.CheckCircle,
-                    title = "Order #1234 delivered",
-                    subtitle = "2 hours ago",
-                    iconColor = Color(0xFF4CAF50)
-                )
-                
-                ActivityItem(
-                    icon = Icons.Filled.Star,
-                    title = "Order #1235 in progress",
-                    subtitle = "4 hours ago",
-                    iconColor = Color(0xFFFF9800)
-                )
-                
-                ActivityItem(
-                    icon = Icons.Filled.List,
-                    title = "Order #1236 assigned",
-                    subtitle = "6 hours ago",
-                    iconColor = Color(0xFF2196F3)
-                )
-            }
-        }
 
         Spacer(modifier = Modifier.weight(1f))
     }
@@ -263,47 +152,6 @@ fun StatCard(
             Text(
                 text = title,
                 style = MaterialTheme.typography.bodyMedium,
-                color = Color.Gray
-            )
-        }
-    }
-}
-
-@Composable
-fun ActivityItem(
-    icon: ImageVector,
-    title: String,
-    subtitle: String,
-    iconColor: Color
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = title,
-            tint = iconColor,
-            modifier = Modifier.size(24.dp)
-        )
-        
-        Spacer(modifier = Modifier.width(16.dp))
-        
-        Column(
-            modifier = Modifier.weight(1f)
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.bodyMedium,
-                color = Color.White,
-                fontWeight = FontWeight.Medium
-            )
-            
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodySmall,
                 color = Color.Gray
             )
         }

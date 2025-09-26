@@ -427,10 +427,14 @@ fun OrderCard(
     )
     
     val cardElevation by animateDpAsState(
-        targetValue = if (isPressed) 8.dp else 2.dp,
+        targetValue = if (isPressed) 8.dp else 4.dp,
         animationSpec = tween(200),
         label = "cardElevation"
     )
+    
+    // Get status-based background color
+    val statusBackgroundColor = getOrderStatusBackgroundColor(order)
+    val statusText = getOrderStatusText(order)
     
     Card(
         modifier = Modifier
@@ -438,29 +442,19 @@ fun OrderCard(
             .scale(cardScale),
         onClick = onClick,
         colors = CardDefaults.cardColors(
-            containerColor = Color(0xFF1E1E1E)
+            containerColor = statusBackgroundColor
         ),
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(16.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = cardElevation)
     ) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
+        Column(
+            modifier = Modifier.padding(16.dp)
         ) {
-            // Status Indicator
-            Card(
-                modifier = Modifier.size(12.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = getOrderStatusColor(order)
-                ),
-                shape = RoundedCornerShape(6.dp)
-            ) {}
-            
-            Spacer(modifier = Modifier.width(16.dp))
-            
-            // Order Details
-            Column(
-                modifier = Modifier.weight(1f)
+            // Header row with customer name and status badge
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
                     text = order.clientName,
@@ -469,59 +463,91 @@ fun OrderCard(
                     fontWeight = FontWeight.Bold
                 )
                 
+                // Status badge
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = Color.White.copy(alpha = 0.2f)
+                    ),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text(
+                        text = statusText,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    )
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            // Location and vehicle info row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Location
                 Text(
                     text = "${order.address}, ${order.regionName}",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = Color.Gray
+                    color = Color.White.copy(alpha = 0.9f),
+                    maxLines = 1,
+                    modifier = Modifier.weight(1f)
                 )
                 
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(
-                        text = order.productName,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color.White
-                    )
-                    
-                    Text(
-                        text = "•",
-                        color = Color.Gray
-                    )
-                    
-                    Text(
-                        text = order.vehicleNumber,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color.White,
-                        fontWeight = FontWeight.Medium
-                    )
-                }
-                
+                // Vehicle
                 Text(
-                    text = order.timeSlot,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color.Gray
+                    text = order.vehicleNumber,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.White,
+                    fontWeight = FontWeight.Medium
                 )
             }
             
-            // Amount and Payment
-            Column(
-                horizontalAlignment = Alignment.End
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            // Product and amount row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
+                // Product info
                 Text(
-                    text = "Rs ${order.totalAmount.toInt()}",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = Color.Black,
-                    fontWeight = FontWeight.Bold
+                    text = "${order.productName} • Qty: ${order.productQuant}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.White,
+                    fontWeight = FontWeight.Medium
                 )
                 
-                Text(
-                    text = order.paymentMethod,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (order.paymentMethod.contains("CASH", ignoreCase = true)) Color(0xFF4CAF50) else Color.Gray
-                )
+                // Amount
+                Column(
+                    horizontalAlignment = Alignment.End
+                ) {
+                    Text(
+                        text = "Rs ${order.totalAmount.toInt()}",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold
+                    )
+                    
+                    Text(
+                        text = if (order.paymentMethod.contains("POD", ignoreCase = true)) "Cash" else if (order.paymentMethod.contains("PL", ignoreCase = true)) "Credit" else order.paymentMethod,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.8f)
+                    )
+                }
             }
+            
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            // Time slot 
+            Text(
+                text = order.timeSlot,
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.White.copy(alpha = 0.8f)
+            )
         }
     }
 }
@@ -533,6 +559,26 @@ private fun getOrderStatusColor(order: Order): Color {
         order.dispatchStatus && order.deliveryStatus && !order.returnStatus -> Color(0xFF4CAF50)
         order.dispatchStatus && order.deliveryStatus && order.returnStatus -> Color(0xFF2196F3)
         else -> Color.Gray
+    }
+}
+
+private fun getOrderStatusBackgroundColor(order: Order): Color {
+    return when {
+        !order.dispatchStatus && !order.deliveryStatus -> Color(0xFFE53E3E) // Glossy Red for pending
+        order.dispatchStatus && !order.deliveryStatus -> Color(0xFFFF8C00) // Glossy Orange for in progress  
+        order.dispatchStatus && order.deliveryStatus && !order.returnStatus -> Color(0xFF38A169) // Glossy Green for delivered
+        order.dispatchStatus && order.deliveryStatus && order.returnStatus -> Color(0xFF3182CE) // Glossy Blue for return
+        else -> Color(0xFFE53E3E) // Default glossy red
+    }
+}
+
+private fun getOrderStatusText(order: Order): String {
+    return when {
+        !order.dispatchStatus && !order.deliveryStatus -> "PENDING"
+        order.dispatchStatus && !order.deliveryStatus -> "IN PROGRESS"  
+        order.dispatchStatus && order.deliveryStatus && !order.returnStatus -> "DELIVERED"
+        order.dispatchStatus && order.deliveryStatus && order.returnStatus -> "RETURNED"
+        else -> "PENDING"
     }
 }
 

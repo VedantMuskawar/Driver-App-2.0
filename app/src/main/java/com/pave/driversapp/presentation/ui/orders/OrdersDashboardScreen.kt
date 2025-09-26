@@ -1,5 +1,7 @@
 package com.pave.driversapp.presentation.ui.orders
 
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -7,13 +9,16 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -27,6 +32,7 @@ import com.pave.driversapp.domain.repository.MembershipRepositoryImpl
 import com.google.firebase.firestore.FirebaseFirestore
 import com.pave.driversapp.presentation.viewmodel.OrdersViewModel
 import com.pave.driversapp.presentation.ui.components.ScheduledOrderCard
+import kotlin.math.abs
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -65,13 +71,13 @@ fun OrdersDashboardScreen(
             .fillMaxSize()
             .background(Color.Black)
     ) {
-        // Top App Bar
+        // Enhanced Top App Bar
         TopAppBar(
             title = { 
                 Text(
-                    text = "$orgName - Orders",
+                    text = "Orders",
                     color = Color.White,
-                    fontSize = 18.sp,
+                    fontSize = 24.sp,
                     fontWeight = FontWeight.Bold
                 ) 
             },
@@ -90,11 +96,20 @@ fun OrdersDashboardScreen(
             )
         )
         
+        // Order Count Subtitle  
+        val orderCount = if (selectedTab == 0) uiState.orders.size else uiState.scheduledOrders.size
+        Text(
+            text = "$orderCount orders ${if (selectedTab == 0) "today" else "scheduled"}",
+            fontSize = 16.sp,
+            color = Color.White.copy(alpha = 0.7f),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+        )
+        
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
             // Date Selector Row (matching the green calendar design)
             DateSelectorRow(
@@ -379,44 +394,88 @@ fun OrdersGrid(
     LazyColumn(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        items(orders.chunked(2)) { orderPair ->
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
+        items(orders) { order ->
+            SingleOrderCard(
+                order = order,
+                onClick = { onOrderClick(order) }
+            )
+        }
+    }
+}
+
+@Composable
+fun SingleOrderCard(
+    order: Order,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val orderStatus = getOrderStatus(order)
+    val statusColor = getStatusBackgroundColor(orderStatus)
+    
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
+        colors = CardDefaults.cardColors(
+            containerColor = statusColor
+        ),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                // Left Column - Vehicle/Time Card
-                VehicleTimeCard(
-                    order = orderPair[0],
-                    onClick = { onOrderClick(orderPair[0]) },
-                    modifier = Modifier.weight(1f)
+                // Customer name
+                Text(
+                    text = order.clientName,
+                    color = Color.White,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold
                 )
                 
-                // Right Column - Order Details Card
-                OrderDetailsCard(
-                    order = orderPair[0],
-                    onClick = { onOrderClick(orderPair[0]) },
-                    modifier = Modifier.weight(1f)
+                // Location
+                Text(
+                    text = ", ${order.regionName}",
+                    color = Color.White.copy(alpha = 0.8f),
+                    fontSize = 14.sp
+                )
+                
+                // Product and vehicle
+                Text(
+                    text = "${order.productName} • ${order.vehicleNumber}",
+                    color = Color.White,
+                    fontSize = 14.sp
+                )
+                
+                // Time slot
+                Text(
+                    text = order.dispatchStart + " - " + order.dispatchEnd,
+                    color = Color.White.copy(alpha = 0.8f),
+                    fontSize = 14.sp
                 )
             }
             
-            // Second row if there's a second order
-            if (orderPair.size > 1) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    VehicleTimeCard(
-                        order = orderPair[1],
-                        onClick = { onOrderClick(orderPair[1]) },
-                        modifier = Modifier.weight(1f)
-                    )
-                    
-                    OrderDetailsCard(
-                        order = orderPair[1],
-                        onClick = { onOrderClick(orderPair[1]) },
-                        modifier = Modifier.weight(1f)
-                    )
-                }
+            // Amount and payment method
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = "Rs ${order.productQuant * order.productUnitPrice}",
+                    color = Color.White,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                
+                Text(
+                    text = if (order.paymentMethod.contains("cash", ignoreCase = true)) "COD" else order.paymentMethod,
+                    color = Color.White.copy(alpha = 0.8f),
+                    fontSize = 14.sp
+                )
             }
         }
     }
@@ -428,13 +487,15 @@ fun VehicleTimeCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val orderStatus = getOrderStatus(order)
+    val statusColor = getStatusBackgroundColor(orderStatus)
+    
     Card(
         modifier = modifier.clickable { onClick() },
         colors = CardDefaults.cardColors(
-            containerColor = Color.Black
+            containerColor = statusColor
         ),
-        shape = RoundedCornerShape(8.dp),
-        border = androidx.compose.foundation.BorderStroke(1.dp, Color.Blue)
+        shape = RoundedCornerShape(12.dp)
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
@@ -465,13 +526,15 @@ fun OrderDetailsCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val orderStatus = getOrderStatus(order)
+    val statusColor = getStatusBackgroundColor(orderStatus)
+    
     Card(
         modifier = modifier.clickable { onClick() },
         colors = CardDefaults.cardColors(
-            containerColor = Color.Black
+            containerColor = statusColor
         ),
-        shape = RoundedCornerShape(8.dp),
-        border = androidx.compose.foundation.BorderStroke(1.dp, Color.Blue)
+        shape = RoundedCornerShape(12.dp)
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
@@ -551,4 +614,27 @@ private fun getDayOfMonth(dateString: String): String {
     } catch (e: Exception) {
         "01"
     }
+}
+
+// Status helper functions for order cards
+private fun getOrderStatus(order: Order): OrderStatus {
+    return when {
+        order.deliveryStatus -> OrderStatus.DELIVERED
+        order.dispatchStatus && !order.deliveryStatus -> OrderStatus.IN_PROGRESS
+        else -> OrderStatus.PENDING
+    }
+}
+
+private fun getStatusBackgroundColor(status: OrderStatus): Color {
+    return when (status) {
+        OrderStatus.PENDING -> Color(0xFF2C2C2C) // Dark Gray for pending
+        OrderStatus.IN_PROGRESS -> Color(0xFF1976D2) // Blue for in progress
+        OrderStatus.DELIVERED -> Color(0xFF388E3C) // Green for delivered
+    }
+}
+
+enum class OrderStatus {
+    PENDING,
+    IN_PROGRESS,
+    DELIVERED
 }
